@@ -346,7 +346,10 @@ def view_sales_history(stdscr):
                     y += 1
 
             try:
-                stdscr.addstr(y+1, 0, "Press any key to return...")
+                if search_term:
+                    stdscr.addstr(y+1, 0, "b:back (clear search)  ENTER:quit to main")
+                else:
+                    stdscr.addstr(y+1, 0, "ENTER:return to main")
             except curses.error:
                 pass
         except Exception as e:
@@ -362,6 +365,10 @@ def view_sales_history(stdscr):
             continue
         elif key == ord('s'):
             search_term = search_mode(stdscr)
+        elif key == ord('b') and search_term:
+            search_term = ""
+        elif key in (10, curses.KEY_ENTER, ord('b')):
+            break
         elif key in (ord('n'), ord('t'), ord('q'), ord('$')):
             new_key = {ord('n'): 'name', ord('t'): 'timestamp', ord('q'): 'quantity', ord('$'): 'total'}[key]
             if new_key == sort_key:
@@ -369,7 +376,7 @@ def view_sales_history(stdscr):
             else:
                 sort_key = new_key
                 sort_directions[new_key] = 1
-        else:
+        elif not search_term:
             break
 
 # ──────────────────────────────────────────────────────────────────────────────
