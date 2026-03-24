@@ -1,0 +1,14 @@
+{
+  "custom_fields": [
+    {
+      "name": "upc",
+      "label": "UPC",
+      "type": "text"
+    },
+    {
+      "name": "other3",
+      "label": "Other3",
+      "type": "number"
+    }
+  ]
+}
