@@ -244,7 +244,7 @@ def record_sale_ui(stdscr, inventory, orig_idx):
         return False
 
     total = qty_sold * price_each
-    confirm = f"Sell {qty_sold:,} × {item.name} @ ${price_each:,.2f} = ${total:,.2f} ? (y/N)"
+    confirm = f"Sell {qty_sold:,} × {item.name} @ ${price_each:,.2f} = ${total:,.2f} ? (y/n)"
     stdscr.addstr(8, 0, confirm[:curses.COLS-1])
     stdscr.refresh()
 
@@ -311,11 +311,13 @@ def view_sales_history(stdscr):
                         break
                     ts = row.get('timestamp', '?').replace('T', ' ')
                     qty = row.get('quantity_sold', '0')
-                    name = row.get('name', '?')[:45]
-                    price = row.get('price_each', '0.00')
-                    total = row.get('total', '0.00')
+                    price = float(row.get('price_each', '0'))
+                    total = float(row.get('total', '0'))
                     
-                    line = f"{ts}  {qty:>4} × {name:<45} @ ${price} = ${total}"
+                    name_width = max(10, w - 50)
+                    name = row.get('name', '?')[:name_width]
+                    
+                    line = f"{ts}  {qty:>4} × {name:<{name_width}} @ ${price:,.2f} = ${total:,.2f}"
                     try:
                         stdscr.addnstr(y, 0, line, w-1)
                     except curses.error:
