@@ -544,7 +544,6 @@ def select_field_to_edit(stdscr, item):
     # Add individual custom field options numbered 10, 11, ...
     for i, field in enumerate(CUSTOM_FIELDS):
         options.append(f"{10 + i}. {field['label']} (custom)")
-    options.append("C. Custom fields only")
     options.append("0. Cancel")
 
     while True:
@@ -638,7 +637,7 @@ def select_field_to_edit(stdscr, item):
 
         prompt_y = min(y + visible_options + 1, h - 2)
         try:
-            stdscr.addstr(prompt_y, 0, "Enter number or C → ")
+            stdscr.addstr(prompt_y, 0, "Enter Number → ")
         except:
             pass
 
@@ -677,10 +676,6 @@ def edit_item(stdscr, inventory, orig_idx):
 
     choice = select_field_to_edit(stdscr, item)
     if choice is None:
-        return
-
-    if choice == 'C':
-        edit_custom_fields_only(stdscr, inventory, orig_idx)
         return
 
     # Individual custom field edit (choices 10, 11, 12, ...)
