@@ -1040,7 +1040,7 @@ def view_details(stdscr, inventory, orig_idx):
                 disp = f"${value:,.2f}"
             elif field['type'] == 'number' and isinstance(value, (int, float)):
                 disp = f"{value:,}"
-            stdscr.addstr(y, 0, f"{field['label']}:     {disp}"); y += 1
+            stdscr.addstr(y, 0, f"{field['label']:13} {disp}"); y += 1
 
         stdscr.addstr(y, 0, f"Min Value:    ${item.min_value:,.2f}"); y += 1
         stdscr.addstr(y, 0, f"Max Value:    ${item.max_value:,.2f}"); y += 1
