@@ -394,7 +394,7 @@ def config_menu(stdscr, inventory=None):
 
         y += 1
         try:
-            stdscr.addstr(y, 2, f"[{len(CUSTOM_FIELDS)}/5]  a:add  #:del  q:quit")
+            stdscr.addstr(y, 2, f"[{len(CUSTOM_FIELDS)}/5]  a:add  #:del  Enter:back")
             stdscr.addstr(y+2, 2, "> ")
         except curses.error:
             pass
@@ -408,7 +408,7 @@ def config_menu(stdscr, inventory=None):
             cmd = ""
         curses.noecho()
 
-        if cmd == 'q':
+        if cmd == 'q' or cmd == '':
             break
         if cmd == 'a':
             if len(CUSTOM_FIELDS) >= 5:
@@ -425,11 +425,18 @@ def config_menu(stdscr, inventory=None):
                 label = get_input(stdscr, "Label: ", 4, 2, 30, "")
                 if not label.strip():
                     continue
-                defkey = label.lower().replace(" ", "_")[:15]
-                key = get_input(stdscr, f"Key [{defkey}]: ", 5, 2, 15, defkey).strip() or defkey
-                typ = get_input(stdscr, "Type [text/number/money]: ", 6, 2, 10, "text").lower()
-                if typ not in ('text','number','money'):
-                    typ = 'text'
+                key = label.lower().replace(" ", "_")[:15]
+                while True:
+                    typ = get_input(stdscr, "Type [text:t/number:n/money:m]: ", 5, 2, 20, "").lower()
+                    if typ in ('t', 'text'):
+                        typ = 'text'
+                        break
+                    elif typ in ('n', 'number'):
+                        typ = 'number'
+                        break
+                    elif typ in ('m', 'money'):
+                        typ = 'money'
+                        break
                 CUSTOM_FIELDS.append({'name':key, 'label':label, 'type':typ})
                 save_config()
                 stdscr.addstr(8, 2, "Added. Press any key...")
@@ -441,6 +448,17 @@ def config_menu(stdscr, inventory=None):
             try:
                 idx = int(cmd) - 1
                 removed_key = CUSTOM_FIELDS[idx]['name']
+                removed_label = CUSTOM_FIELDS[idx]['label']
+                stdscr.addstr(y+4, 2, f"Delete '{removed_label}'? (y/n): ")
+                stdscr.refresh()
+                curses.echo()
+                try:
+                    confirm = stdscr.getstr(y+4, 28, 3).decode('utf-8').strip().lower()
+                except:
+                    confirm = ""
+                curses.noecho()
+                if confirm != 'y':
+                    continue
                 CUSTOM_FIELDS.pop(idx)
                 save_config()
                 # Remove the deleted field's data from all inventory items
@@ -1047,7 +1065,7 @@ def view_details(stdscr, inventory, orig_idx):
         stdscr.addstr(y, 0, f"Description:  {item.description}")
         y += 2
 
-        stdscr.addstr(y, 0, "e = edit   d = delete   c = config fields   other = back")
+        stdscr.addstr(y, 0, "e = edit   d = delete   c = config fields   Enter = back")
         stdscr.refresh()
 
         key = stdscr.getch()
