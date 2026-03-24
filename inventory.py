@@ -277,6 +277,10 @@ def view_sales_history(stdscr):
         stdscr.getch()
         return
 
+    search_term = ""
+    sort_key = 'timestamp'
+    sort_directions = {'timestamp': -1, 'name': 1, 'quantity': 1, 'total': 1}
+
     while True:
         stdscr.clear()
         h, w = stdscr.getmaxyx()
@@ -294,16 +298,33 @@ def view_sales_history(stdscr):
                 continue
             return
 
-        y = 0
-        try:
-            stdscr.addstr(y, 0, "Recent Sales (newest first)".center(min(w, 80))); y += 2
-        except curses.error:
-            pass
-
         try:
             with SALES_LOG.open('r', encoding='utf-8') as f:
                 rows = list(csv.DictReader(f))
-                rows.reverse()
+
+                term = search_term.lower()
+                if term:
+                    rows = [r for r in rows if term in r.get('name', '').lower()]
+
+                direction = sort_directions.get(sort_key, 1)
+                rev = direction < 0
+
+                if sort_key == 'timestamp':
+                    rows.sort(key=lambda x: x.get('timestamp', ''), reverse=rev)
+                elif sort_key == 'name':
+                    rows.sort(key=lambda x: x.get('name', '').lower(), reverse=rev)
+                elif sort_key == 'quantity':
+                    rows.sort(key=lambda x: int(x.get('quantity_sold', 0)), reverse=rev)
+                elif sort_key == 'total':
+                    rows.sort(key=lambda x: float(x.get('total', 0)), reverse=rev)
+
+                dir_symbol = "▼" if direction < 0 else "▲"
+                status = f"Search: {search_term or '(none)'}   Sort: {sort_key} {dir_symbol}   (s:search n:name t:time q:qty $:total)"
+                try:
+                    stdscr.addstr(0, 0, status[:w-1])
+                except curses.error:
+                    pass
+                y = 2
 
                 max_lines = h - y - 4
                 for row in rows[:max_lines]:
@@ -339,6 +360,15 @@ def view_sales_history(stdscr):
         
         if key == curses.KEY_RESIZE:
             continue
+        elif key == ord('s'):
+            search_term = search_mode(stdscr)
+        elif key in (ord('n'), ord('t'), ord('q'), ord('$')):
+            new_key = {ord('n'): 'name', ord('t'): 'timestamp', ord('q'): 'quantity', ord('$'): 'total'}[key]
+            if new_key == sort_key:
+                sort_directions[new_key] *= -1
+            else:
+                sort_key = new_key
+                sort_directions[new_key] = 1
         else:
             break
 
