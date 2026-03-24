@@ -394,7 +394,7 @@ def config_menu(stdscr, inventory=None):
 
         y += 1
         try:
-            stdscr.addstr(y, 2, f"[{len(CUSTOM_FIELDS)}/5]  a:add  d#:del  q:quit")
+            stdscr.addstr(y, 2, f"[{len(CUSTOM_FIELDS)}/5]  a:add  #:del  q:quit")
             stdscr.addstr(y+2, 2, "> ")
         except curses.error:
             pass
@@ -437,23 +437,22 @@ def config_menu(stdscr, inventory=None):
             except curses.error:
                 pass
 
-        elif cmd.startswith('d') and cmd[1:].isdigit():
+        elif cmd.isdigit() and 1 <= int(cmd) <= len(CUSTOM_FIELDS):
             try:
-                idx = int(cmd[1:]) - 1
-                if 0 <= idx < len(CUSTOM_FIELDS):
-                    removed_key = CUSTOM_FIELDS[idx]['name']
-                    CUSTOM_FIELDS.pop(idx)
-                    save_config()
-                    # Remove the deleted field's data from all inventory items
-                    if inventory is not None:
-                        for item in inventory:
-                            item.custom.pop(removed_key, None)
-                        safe_save_inventory(inventory)
-                    try:
-                        stdscr.addstr(y+4, 2, "Removed. Press any key...")
-                        stdscr.getch()
-                    except:
-                        pass
+                idx = int(cmd) - 1
+                removed_key = CUSTOM_FIELDS[idx]['name']
+                CUSTOM_FIELDS.pop(idx)
+                save_config()
+                # Remove the deleted field's data from all inventory items
+                if inventory is not None:
+                    for item in inventory:
+                        item.custom.pop(removed_key, None)
+                    safe_save_inventory(inventory)
+                try:
+                    stdscr.addstr(y+4, 2, "Removed. Press any key...")
+                    stdscr.getch()
+                except:
+                    pass
             except:
                 pass
 

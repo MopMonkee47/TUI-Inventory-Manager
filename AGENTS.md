@@ -10,3 +10,7 @@ CRITICAL: At the start of every conversation, immediately read the file `DOCUMEN
 - **Main file**: `inventoryV036.py`
 - **Data files**: `inventory.db` (CSV), `inventory.db.bak`, `inventory_sales.log`, `inventory_config.json`
 - **Run**: `python inventoryV036.py` (requires interactive TTY)
+
+## Git Guidelines
+
+- **Do NOT commit** database, config, or log files: `inventory.db`, `inventory.db.bak`, `inventory_sales.log`, `inventory_config.json`

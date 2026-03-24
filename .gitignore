@@ -1,5 +1,6 @@
 *.db
 *.bak
 *.log
+*.json
 *.pyc
 __pycache__/
