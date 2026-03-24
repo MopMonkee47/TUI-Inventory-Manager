@@ -1171,6 +1171,69 @@ def check_size(stdscr):
 # Main loop
 # ──────────────────────────────────────────────────────────────────────────────
 
+def show_splash(stdscr):
+    curses.curs_set(0)
+    curses.start_color()
+    curses.use_default_colors()
+    curses.init_pair(1, curses.COLOR_CYAN,   -1)
+    curses.init_pair(2, curses.COLOR_YELLOW, -1)
+    curses.init_pair(3, curses.COLOR_RED,    -1)
+    curses.init_pair(4, curses.COLOR_GREEN,  -1)
+
+    while True:
+        stdscr.clear()
+        h, w = stdscr.getmaxyx()
+
+        if h < 15 or w < 50:
+            try:
+                stdscr.addstr(h//2, 0, "Terminal too small for splash. Enlarge and press any key...")
+            except curses.error:
+                pass
+            stdscr.refresh()
+            stdscr.getch()
+            continue
+
+        box_h = 11
+        box_w = 43
+        box_y = (h - box_h) // 2
+        box_x = max(0, (w - box_w) // 2)
+
+        inner_w = box_w - 2
+        cy = curses.color_pair(1) | curses.A_BOLD
+
+        try:
+            stdscr.attron(cy)
+            stdscr.addstr(box_y,     box_x,     "┌" + "─" * inner_w + "┐")
+            stdscr.addstr(box_y + 1, box_x,     "│" + " " * inner_w + "│")
+            stdscr.addstr(box_y + 2, box_x,     "│" + "TUI Inventory".center(inner_w) + "│")
+            stdscr.addstr(box_y + 3, box_x,     "│" + "─" * 36 + "─".rjust(inner_w - 36) + "│")
+            stdscr.addstr(box_y + 4, box_x,     "│" + " " * inner_w + "│")
+            stdscr.addstr(box_y + 5, box_x,     "│" + "Track your inventory with ease".center(inner_w) + "│")
+            stdscr.addstr(box_y + 6, box_x,     "│" + " " * inner_w + "│")
+            stdscr.addstr(box_y + 7, box_x,     "│" + "[ Add • Edit • Sell • Search ]".center(inner_w) + "│")
+            stdscr.addstr(box_y + 8, box_x,     "│" + " " * inner_w + "│")
+            stdscr.addstr(box_y + 9, box_x,     "│" + " " * inner_w + "│")
+            stdscr.addstr(box_y + 10, box_x,    "└" + "─" * inner_w + "┘")
+            stdscr.attroff(cy)
+        except curses.error:
+            pass
+
+        prompt = "         Press ENTER to continue...          "
+        prompt_y = box_y + box_h + 1
+        stdscr.attron(curses.A_BLINK)
+        try:
+            stdscr.addnstr(prompt_y, max(0, (w - len(prompt)) // 2), prompt, w - 1)
+        except curses.error:
+            pass
+        stdscr.attroff(curses.A_BLINK)
+
+        stdscr.refresh()
+        key = stdscr.getch()
+        if key in (10, curses.KEY_ENTER):
+            break
+        elif key == curses.KEY_RESIZE:
+            continue
+
 def main(stdscr):
     curses.curs_set(0)
     curses.start_color()
@@ -1179,6 +1242,8 @@ def main(stdscr):
     curses.init_pair(2, curses.COLOR_YELLOW, -1)
     curses.init_pair(3, curses.COLOR_RED,    -1)
     curses.init_pair(4, curses.COLOR_GREEN,  -1)
+
+    show_splash(stdscr)
 
     inventory = load_inventory()
     load_config()
