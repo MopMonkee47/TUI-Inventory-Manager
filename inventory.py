@@ -395,6 +395,12 @@ def view_sales_history(stdscr):
 
 def config_menu(stdscr, inventory=None):
     global CUSTOM_FIELDS
+
+    stdscr.keypad(1)
+
+    TABS = ["Custom Fields", "Settings", "Display"]
+    current_tab = 0
+
     while True:
         stdscr.clear()
         h, w = stdscr.getmaxyx()
@@ -413,118 +419,154 @@ def config_menu(stdscr, inventory=None):
             else:
                 break
 
+        tab_width = min(20, w // len(TABS))
         try:
-            stdscr.addstr(0, 0, "Custom Fields (max 5)")
-            stdscr.addstr(1, 0, "-" * min(50, w-1))
+            for i, tab in enumerate(TABS):
+                x = i * tab_width
+                if i == current_tab:
+                    stdscr.attron(curses.A_REVERSE)
+                    stdscr.addstr(0, x, f" {tab} ")
+                    stdscr.attroff(curses.A_REVERSE)
+                else:
+                    stdscr.addstr(0, x, f" {tab} ")
+            stdscr.addstr(1, 0, "─" * min(w, 80))
         except curses.error:
             pass
 
-        y = 3
-        if not CUSTOM_FIELDS:
-            try:
-                stdscr.addstr(y, 2, "(none yet)")
-            except:
-                pass
-            y += 2
-        else:
-            for i, f in enumerate(CUSTOM_FIELDS):
-                if y >= h - 6:
-                    try:
-                        stdscr.addstr(y, 2, "[more fields hidden – resize taller]")
-                    except:
-                        pass
-                    break
-                line = f"{i+1}. {f['label']} ({f['type']}) key:{f['name']}"
-                try:
-                    stdscr.addnstr(y, 2, line, w-3)
-                except curses.error:
-                    pass
-                y += 1
+        content_top = 2
 
-        y += 1
+        if current_tab == 0:
+            y = content_top
+            if not CUSTOM_FIELDS:
+                try:
+                    stdscr.addstr(y, 2, "(none yet)")
+                except:
+                    pass
+                y += 2
+            else:
+                for i, f in enumerate(CUSTOM_FIELDS):
+                    if y >= h - 6:
+                        try:
+                            stdscr.addstr(y, 2, "[more fields hidden – resize taller]")
+                        except:
+                            pass
+                        break
+                    line = f"{i+1}. {f['label']} ({f['type']})"
+                    try:
+                        stdscr.addnstr(y, 2, line, w-3)
+                    except curses.error:
+                        pass
+                    y += 1
+
+            y += 1
+            try:
+                stdscr.addstr(y, 2, f"[{len(CUSTOM_FIELDS)}/5]  a:add  #:del")
+            except curses.error:
+                pass
+
+        if current_tab == 1:
+            y = content_top
+            try:
+                stdscr.addstr(y, 2, "Settings")
+                stdscr.addstr(y+2, 2, "(Settings options coming soon)")
+            except curses.error:
+                pass
+
+        if current_tab == 2:
+            y = content_top
+            try:
+                stdscr.addstr(y, 2, "Display Settings")
+                stdscr.addstr(y+2, 2, f"Name width:    {NAME_W}")
+                stdscr.addstr(y+3, 2, f"Quantity width: {QTY_W}")
+                stdscr.addstr(y+4, 2, f"Price width:    {PRICE_W}")
+                stdscr.addstr(y+5, 2, f"Location width: {LOCATION_W}")
+                stdscr.addstr(y+7, 2, f"Low stock threshold:  {LOW_STOCK_THRESHOLD}")
+                stdscr.addstr(y+8, 2, f"Critical stock:      {CRITICAL_STOCK}")
+            except curses.error:
+                pass
+
         try:
-            stdscr.addstr(y, 2, f"[{len(CUSTOM_FIELDS)}/5]  a:add  #:del  Enter:back")
-            stdscr.addstr(y+2, 2, "> ")
+            stdscr.addstr(h-1, 0, f"←/→: tabs  a: add  #: del  Enter: exit".ljust(w-1))
         except curses.error:
             pass
 
         stdscr.refresh()
+        key = stdscr.getch()
 
-        curses.echo()
-        try:
-            cmd = stdscr.getstr(y+2, 4, 15).decode('utf-8').strip().lower()
-        except:
-            cmd = ""
-        curses.noecho()
-
-        if cmd == 'q' or cmd == '':
+        if key == curses.KEY_RESIZE:
+            continue
+        elif key in (ord('1'), ord('2'), ord('3')):
+            current_tab = ord(str(key)) - ord('1')
+        elif key in (curses.KEY_LEFT, ord('h')):
+            current_tab = (current_tab - 1) % len(TABS)
+        elif key in (curses.KEY_RIGHT, ord('l')):
+            current_tab = (current_tab + 1) % len(TABS)
+        elif key in (10, curses.KEY_ENTER, ord('q'), ord('b')):
             break
-        if cmd == 'a':
-            if len(CUSTOM_FIELDS) >= 5:
+        elif current_tab == 0 and key == ord('a'):
+                if len(CUSTOM_FIELDS) >= 5:
+                    try:
+                        stdscr.addstr(y+4, 2, "Max 5 fields reached. Press any key...")
+                        stdscr.getch()
+                    except:
+                        pass
+                else:
+                    stdscr.clear()
+                    try:
+                        stdscr.addstr(2, 2, "Add Field")
+                        label = get_input(stdscr, "Label: ", 4, 2, 30, "")
+                        if not label.strip():
+                            pass
+                        else:
+                            key = label.lower().replace(" ", "_")[:15]
+                            while True:
+                                typ = get_input(stdscr, "Type [text:t/number:n/money:m]: ", 5, 2, 20, "").lower()
+                                if typ in ('t', 'text'):
+                                    typ = 'text'
+                                    break
+                                elif typ in ('n', 'number'):
+                                    typ = 'number'
+                                    break
+                                elif typ in ('m', 'money'):
+                                    typ = 'money'
+                                    break
+                            CUSTOM_FIELDS.append({'name':key, 'label':label, 'type':typ})
+                            save_config()
+                            stdscr.addstr(8, 2, "Added. Press any key...")
+                            stdscr.getch()
+                    except curses.error:
+                        pass
+        elif current_tab == 0 and 48 <= key <= 57:
+            cmd = chr(key)
+            if cmd.isdigit() and 1 <= int(cmd) <= len(CUSTOM_FIELDS):
                 try:
-                    stdscr.addstr(y+4, 2, "Max 5 fields reached. Press any key...")
-                    stdscr.getch()
+                    idx = int(cmd) - 1
+                    removed_key = CUSTOM_FIELDS[idx]['name']
+                    removed_label = CUSTOM_FIELDS[idx]['label']
+                    stdscr.addstr(y+4, 2, f"Delete '{removed_label}'? (y/n): ")
+                    stdscr.refresh()
+                    curses.echo()
+                    try:
+                        confirm = stdscr.getstr(y+4, 28, 3).decode('utf-8').strip().lower()
+                    except:
+                        confirm = ""
+                    curses.noecho()
+                    if confirm == 'y':
+                        CUSTOM_FIELDS.pop(idx)
+                        save_config()
+                        if inventory is not None:
+                            for item in inventory:
+                                item.custom.pop(removed_key, None)
+                            safe_save_inventory(inventory)
+                        try:
+                            stdscr.addstr(y+4, 2, "Removed. Press any key...")
+                            stdscr.getch()
+                        except:
+                            pass
                 except:
                     pass
-                continue
 
-            stdscr.clear()
-            try:
-                stdscr.addstr(2, 2, "Add Field")
-                label = get_input(stdscr, "Label: ", 4, 2, 30, "")
-                if not label.strip():
-                    continue
-                key = label.lower().replace(" ", "_")[:15]
-                while True:
-                    typ = get_input(stdscr, "Type [text:t/number:n/money:m]: ", 5, 2, 20, "").lower()
-                    if typ in ('t', 'text'):
-                        typ = 'text'
-                        break
-                    elif typ in ('n', 'number'):
-                        typ = 'number'
-                        break
-                    elif typ in ('m', 'money'):
-                        typ = 'money'
-                        break
-                CUSTOM_FIELDS.append({'name':key, 'label':label, 'type':typ})
-                save_config()
-                stdscr.addstr(8, 2, "Added. Press any key...")
-                stdscr.getch()
-            except curses.error:
-                pass
-
-        elif cmd.isdigit() and 1 <= int(cmd) <= len(CUSTOM_FIELDS):
-            try:
-                idx = int(cmd) - 1
-                removed_key = CUSTOM_FIELDS[idx]['name']
-                removed_label = CUSTOM_FIELDS[idx]['label']
-                stdscr.addstr(y+4, 2, f"Delete '{removed_label}'? (y/n): ")
-                stdscr.refresh()
-                curses.echo()
-                try:
-                    confirm = stdscr.getstr(y+4, 28, 3).decode('utf-8').strip().lower()
-                except:
-                    confirm = ""
-                curses.noecho()
-                if confirm != 'y':
-                    continue
-                CUSTOM_FIELDS.pop(idx)
-                save_config()
-                # Remove the deleted field's data from all inventory items
-                if inventory is not None:
-                    for item in inventory:
-                        item.custom.pop(removed_key, None)
-                    safe_save_inventory(inventory)
-                try:
-                    stdscr.addstr(y+4, 2, "Removed. Press any key...")
-                    stdscr.getch()
-                except:
-                    pass
-            except:
-                pass
-
-        if cmd == 'q':
-            break
+    return
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Input / Validation Helpers
