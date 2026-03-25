@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Weeda Inventory** (`inventoryV036.py`) is a single-file, terminal-based inventory management system written in Python 3. It uses the `curses` library to render a full text user interface (TUI) in the terminal. It has **zero external dependencies** -- only Python standard library modules are used.
+**TUI Inventory** (`inventoryV036.py`) is a single-file, terminal-based inventory management system written in Python 3. It uses the `curses` library to render a full text user interface (TUI) in the terminal. It has **zero external dependencies** -- only Python standard library modules are used.
 
 **Run it with:**
 ```bash

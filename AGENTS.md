@@ -1,4 +1,4 @@
-# Weeda Inventory
+# TUI Inventory
 
 ## Project Context
 
@@ -7,9 +7,9 @@ CRITICAL: At the start of every conversation, immediately read the file `DOCUMEN
 ## Quick Reference
 
 - **Single-file Python 3 TUI app** using `curses` (zero external dependencies)
-- **Main file**: `inventoryV036.py`
+- **Main file**: `inventory.py`
 - **Data files**: `inventory.db` (CSV), `inventory.db.bak`, `inventory_sales.log`, `inventory_config.json`
-- **Run**: `python inventoryV036.py` (requires interactive TTY)
+- **Run**: `python inventory.py` (requires interactive TTY)
 
 ## Git Guidelines
 

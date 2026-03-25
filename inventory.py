@@ -318,13 +318,23 @@ def view_sales_history(stdscr):
                 elif sort_key == 'total':
                     rows.sort(key=lambda x: float(x.get('total', 0)), reverse=rev)
 
-                dir_symbol = "▼" if direction < 0 else "▲"
+                stdscr.attron(curses.color_pair(1))
+                stdscr.addstr(0, 0, "Sales History".center(min(w, 100)))
+                stdscr.attroff(curses.color_pair(1))
+
+                dir_symbol = "↓" if direction < 0 else "↑"
                 status = f"Search: {search_term or '(none)'}   Sort: {sort_key} {dir_symbol}   (s:search n:name t:time q:qty $:total)"
                 try:
-                    stdscr.addstr(0, 0, status[:w-1])
+                    stdscr.addstr(1, 0, status[:w-1])
                 except curses.error:
                     pass
-                y = 2
+
+                try:
+                    stdscr.addstr(2, 0, "-" * min(w, 100))
+                except curses.error:
+                    pass
+
+                y = 3
 
                 max_lines = h - y - 4
                 for row in rows[:max_lines]:
@@ -347,9 +357,9 @@ def view_sales_history(stdscr):
 
             try:
                 if search_term:
-                    stdscr.addstr(y+1, 0, "b:back (clear search)  ENTER:quit to main")
+                    stdscr.addstr(y+2, 0, "b:back (clear search)  ENTER:return to main")
                 else:
-                    stdscr.addstr(y+1, 0, "ENTER:return to main")
+                    stdscr.addstr(y+2, 0, "ENTER:return to main")
             except curses.error:
                 pass
         except Exception as e:
@@ -1153,7 +1163,7 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     stdscr.attroff(curses.color_pair(1))
 
     dir_symbol = "↓" if direction > 0 else "↑"
-    stdscr.addstr(1, 0, f"Search: {search_term or '(none)'}   Sort: {sort_key} {dir_symbol}   (n:name t:qty l:loc)")
+    stdscr.addstr(1, 0, f"Search: {search_term or '(none)'}   Sort: {sort_key} {dir_symbol}   (s:search n:name t:qty l:loc)")
 
     stdscr.addstr(2, 0, "-" * min(w, 100))
 
@@ -1192,9 +1202,8 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
         if color_pair: stdscr.attroff(curses.color_pair(color_pair))
 
     total_items = len(filtered)
-    low_stock   = sum(1 for item in filtered if item.stock_status in ("low", "critical"))
 
-    stats = f"Items:{total_items} Low:{low_stock}"
+    stats = f"Items:{total_items}"
     controls = "q:quit a:add s:search r:sale h:history c:cfg ENTER:details"
     footer = f"{stats} | {controls}"
     stdscr.addnstr(h-1, 0, footer, w-1)
