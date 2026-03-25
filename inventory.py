@@ -394,7 +394,7 @@ def view_sales_history(stdscr):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def config_menu(stdscr, inventory=None):
-    global CUSTOM_FIELDS
+    global CUSTOM_FIELDS, LOW_STOCK_THRESHOLD, CRITICAL_STOCK
 
     stdscr.keypad(1)
 
@@ -419,21 +419,28 @@ def config_menu(stdscr, inventory=None):
             else:
                 break
 
+        try:
+            stdscr.attron(curses.color_pair(1))
+            stdscr.addstr(0, 0, "App Configuration".center(min(w, 100)))
+            stdscr.attroff(curses.color_pair(1))
+        except curses.error:
+            pass
+
         tab_width = min(20, w // len(TABS))
         try:
             for i, tab in enumerate(TABS):
                 x = i * tab_width
                 if i == current_tab:
                     stdscr.attron(curses.A_REVERSE)
-                    stdscr.addstr(0, x, f" {tab} ")
+                    stdscr.addstr(1, x, f" {tab} ")
                     stdscr.attroff(curses.A_REVERSE)
                 else:
-                    stdscr.addstr(0, x, f" {tab} ")
-            stdscr.addstr(1, 0, "─" * min(w, 80))
+                    stdscr.addstr(1, x, f" {tab} ")
+            stdscr.addstr(2, 0, "─" * min(w, 80))
         except curses.error:
             pass
 
-        content_top = 2
+        content_top = 3
 
         if current_tab == 0:
             y = content_top
@@ -480,8 +487,9 @@ def config_menu(stdscr, inventory=None):
                 stdscr.addstr(y+3, 2, f"Quantity width: {QTY_W}")
                 stdscr.addstr(y+4, 2, f"Price width:    {PRICE_W}")
                 stdscr.addstr(y+5, 2, f"Location width: {LOCATION_W}")
-                stdscr.addstr(y+7, 2, f"Low stock threshold:  {LOW_STOCK_THRESHOLD}")
-                stdscr.addstr(y+8, 2, f"Critical stock:      {CRITICAL_STOCK}")
+                stdscr.addstr(y+7, 2, f"1. Low stock threshold:  {LOW_STOCK_THRESHOLD}")
+                stdscr.addstr(y+8, 2, f"2. Critical stock:      {CRITICAL_STOCK}")
+                stdscr.addstr(y+10, 2, "(press 1 or 2 to edit)")
             except curses.error:
                 pass
 
@@ -503,6 +511,28 @@ def config_menu(stdscr, inventory=None):
             current_tab = (current_tab + 1) % len(TABS)
         elif key in (10, curses.KEY_ENTER, ord('q'), ord('b')):
             break
+        elif current_tab == 2 and key == ord('1'):
+            try:
+                stdscr.addstr(y+11, 2, "New low stock threshold: ")
+                stdscr.refresh()
+                curses.echo()
+                val = stdscr.getstr(y+11, 26, 5).decode('utf-8').strip()
+                curses.noecho()
+                if val.isdigit():
+                    LOW_STOCK_THRESHOLD = int(val)
+            except:
+                curses.noecho()
+        elif current_tab == 2 and key == ord('2'):
+            try:
+                stdscr.addstr(y+11, 2, "New critical stock level: ")
+                stdscr.refresh()
+                curses.echo()
+                val = stdscr.getstr(y+11, 26, 5).decode('utf-8').strip()
+                curses.noecho()
+                if val.isdigit():
+                    CRITICAL_STOCK = int(val)
+            except:
+                curses.noecho()
         elif current_tab == 0 and key == ord('a'):
                 if len(CUSTOM_FIELDS) >= 5:
                     try:
