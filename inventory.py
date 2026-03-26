@@ -378,26 +378,40 @@ def view_sales_history(stdscr):
                 except curses.error:
                     pass
 
-                y = 3
+                try:
+                    stdscr.addstr(3, 0, "DATE       NAME                 QTY  PRICE     TOTAL    PO")
+                    stdscr.addstr(4, 0, "---------- -------------------- --- -------- -------- ----------")
+                except curses.error:
+                    pass
+
+                y = 5
 
                 max_lines = h - y - 4
                 for row in rows[:max_lines]:
                     if y >= h - 3:
                         break
-                    ts = row.get('timestamp', '?').replace('T', ' ')
-                    qty = row.get('quantity_sold', '0')
+                    ts = row.get('timestamp', '?')[:10]
+                    qty = int(row.get('quantity_sold', '0'))
                     price = float(row.get('price_each', '0'))
                     total = float(row.get('total', '0'))
+                    po = row.get('po_number', '')
                     
-                    name_width = max(10, w - 50)
-                    name = row.get('name', '?')[:name_width]
+                    name = row.get('name', '?')[:20]
                     
-                    line = f"{ts}  {qty:>4} × {name:<{name_width}} @ ${price:,.2f} = ${total:,.2f}"
+                    po_str = f"{po}" if po else "-"
+                    line = f"{ts:<10} {name:<20} {qty:>3}  ${price:>7,.2f}  ${total:>7,.2f}  {po_str:<10}"
                     try:
                         stdscr.addnstr(y, 0, line, w-1)
                     except curses.error:
                         pass
                     y += 1
+
+            if len(rows) > max_lines:
+                try:
+                    stdscr.addstr(y, 0, f"... {len(rows) - max_lines} more rows (resize to see more)")
+                except curses.error:
+                    pass
+                y += 1
 
             try:
                 if search_term:
