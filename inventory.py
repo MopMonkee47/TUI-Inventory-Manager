@@ -39,25 +39,54 @@ CRITICAL_STOCK      = 3
 # Global custom fields
 CUSTOM_FIELDS = []  # [{'name':str, 'label':str, 'type':'text'|'number'|'money'}, ...]
 
+# Theme color settings
+THEME_COLORS = {
+    'cyan': curses.COLOR_CYAN,
+    'green': curses.COLOR_GREEN,
+    'blue': curses.COLOR_BLUE,
+    'magenta': curses.COLOR_MAGENTA,
+    'red': curses.COLOR_RED,
+    'yellow': curses.COLOR_YELLOW,
+    'white': curses.COLOR_WHITE,
+}
+THEME_COLOR_PAIRS = {
+    'cyan': 10,
+    'green': 11,
+    'blue': 12,
+    'magenta': 13,
+    'red': 14,
+    'yellow': 15,
+    'white': 16,
+}
+THEME_COLOR = curses.COLOR_CYAN
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Config load/save
 # ──────────────────────────────────────────────────────────────────────────────
 
 def load_config():
-    global CUSTOM_FIELDS
+    global CUSTOM_FIELDS, THEME_COLOR
     if CONFIG_FILE.exists():
         try:
             with CONFIG_FILE.open('r', encoding='utf-8') as f:
                 data = json.load(f)
                 CUSTOM_FIELDS = data.get('custom_fields', [])[:5]
+                color_name = data.get('theme_color', 'cyan')
+                THEME_COLOR = THEME_COLORS.get(color_name, curses.COLOR_CYAN)
         except Exception:
             CUSTOM_FIELDS = []
+            THEME_COLOR = curses.COLOR_CYAN
     else:
         CUSTOM_FIELDS = []
+        THEME_COLOR = curses.COLOR_CYAN
 
-def save_config():
+def save_config(include_theme=True):
     with CONFIG_FILE.open('w', encoding='utf-8') as f:
-        json.dump({'custom_fields': CUSTOM_FIELDS}, f, indent=2)
+        color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
+        if include_theme:
+            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name}, f, indent=2)
+        else:
+            json.dump({'custom_fields': CUSTOM_FIELDS}, f, indent=2)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Item model
@@ -174,7 +203,7 @@ def safe_save_inventory(inventory):
 # Sales Recording
 # ──────────────────────────────────────────────────────────────────────────────
 
-def record_sale(inventory, orig_idx, qty_sold, price_each):
+def record_sale(inventory, orig_idx, qty_sold, price_each, po_number=None):
     if not (0 <= orig_idx < len(inventory)):
         return False
     item = inventory[orig_idx]
@@ -191,6 +220,7 @@ def record_sale(inventory, orig_idx, qty_sold, price_each):
         'quantity_sold': qty_sold,
         'price_each': f"{price_each:.2f}",
         'total': f"{total:.2f}",
+        'po_number': po_number or '',
         'remaining_stock': item.quantity
     }
 
@@ -232,7 +262,7 @@ def record_sale_ui(stdscr, inventory, orig_idx):
         return False
 
     default_price = f"{item.sale:.2f}" if item.sale > 0 else "0.00"
-    price_str = get_input(stdscr, "Price each ($) ", 6, 0, 12, default_price)
+    price_str = get_input(stdscr, "Price each ($): ", 6, 0, 12, "")
     try:
         price_each = float(price_str or "0.00")
         if price_each <= 0:
@@ -243,18 +273,32 @@ def record_sale_ui(stdscr, inventory, orig_idx):
         stdscr.getch()
         return False
 
-    total = qty_sold * price_each
-    confirm = f"Sell {qty_sold:,} × {item.name} @ ${price_each:,.2f} = ${total:,.2f} ? (y/n)"
-    stdscr.addstr(8, 0, confirm[:curses.COLS-1])
-    stdscr.refresh()
+    while True:
+        stdscr.addstr(10, 0, " " * (curses.COLS - 1))
+        stdscr.addstr(9, 0, " " * (curses.COLS - 1))
+        po_str = get_input(stdscr, "PO Number (optional, 20 max): ", 9, 0, 20, "")
+        po_number = po_str.strip() if po_str else ""
 
-    ch = stdscr.getch()
-    if ch not in (ord('y'), ord('Y'), ord(' ')):
-        stdscr.addstr(10, 0, "Cancelled. Press any key...")
-        stdscr.getch()
-        return False
+        total = qty_sold * price_each
+        po_display = f"PO: {po_number}" if po_number else "PO: -"
+        confirm = f"Sell {qty_sold:,} × {item.name} @ ${price_each:,.2f} = ${total:,.2f} ? (y/n/r)"
+        stdscr.addstr(7, 0, po_display)
+        stdscr.addstr(10, 0, confirm[:curses.COLS-1])
+        stdscr.refresh()
 
-    success = record_sale(inventory, orig_idx, qty_sold, price_each)
+        ch = stdscr.getch()
+        if ch in (ord('r'), ord('R')):
+            continue
+        elif ch not in (ord('y'), ord('Y'), ord(' ')):
+            stdscr.addstr(12, 0, "Cancelled. Press any key...")
+            stdscr.getch()
+            return False
+        else:
+            break
+
+    success = record_sale(inventory, orig_idx, qty_sold, price_each, po_number)
+    stdscr.addstr(9, 0, " " * (curses.COLS - 1))
+    stdscr.addstr(10, 0, " " * (curses.COLS - 1))
     msg = f"Sale recorded. New stock: {inventory[orig_idx].quantity:,}" if success else "Error recording sale."
     stdscr.addstr(10, 0, msg)
     stdscr.addstr(12, 0, "Press any key...")
@@ -394,9 +438,13 @@ def view_sales_history(stdscr):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def config_menu(stdscr, inventory=None):
-    global CUSTOM_FIELDS, LOW_STOCK_THRESHOLD, CRITICAL_STOCK
+    global CUSTOM_FIELDS, LOW_STOCK_THRESHOLD, CRITICAL_STOCK, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS
 
+    load_config()
     stdscr.keypad(1)
+
+    for color_name, pair_id in THEME_COLOR_PAIRS.items():
+        curses.init_pair(pair_id, THEME_COLORS[color_name], curses.COLOR_BLACK)
 
     TABS = ["Custom Fields", "Settings", "Display"]
     current_tab = 0
@@ -431,9 +479,9 @@ def config_menu(stdscr, inventory=None):
             for i, tab in enumerate(TABS):
                 x = i * tab_width
                 if i == current_tab:
-                    stdscr.attron(curses.A_REVERSE)
+                    stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
                     stdscr.addstr(1, x, f" {tab} ")
-                    stdscr.attroff(curses.A_REVERSE)
+                    stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
                 else:
                     stdscr.addstr(1, x, f" {tab} ")
             stdscr.addstr(2, 0, "─" * min(w, 80))
@@ -444,6 +492,11 @@ def config_menu(stdscr, inventory=None):
 
         if current_tab == 0:
             y = content_top
+            try:
+                stdscr.addstr(y, 2, "Custom Fields")
+            except curses.error:
+                pass
+            y += 2
             if not CUSTOM_FIELDS:
                 try:
                     stdscr.addstr(y, 2, "(none yet)")
@@ -473,9 +526,22 @@ def config_menu(stdscr, inventory=None):
 
         if current_tab == 1:
             y = content_top
+            current_color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
             try:
                 stdscr.addstr(y, 2, "Settings")
-                stdscr.addstr(y+2, 2, "(Settings options coming soon)")
+                stdscr.addstr(y+2, 2, "Theme Color (titles & splash):")
+                y += 3
+                color_options = list(THEME_COLORS.keys())
+                for i, color_name in enumerate(color_options):
+                    prefix = ">" if color_name == current_color_name else " "
+                    try:
+                        stdscr.addstr(y + i, 2, f"{i+1}. {prefix} ")
+                        stdscr.attron(curses.color_pair(THEME_COLOR_PAIRS[color_name]))
+                        stdscr.addstr("  " + color_name.capitalize())
+                        stdscr.attroff(curses.color_pair(THEME_COLOR_PAIRS[color_name]))
+                    except curses.error:
+                        pass
+                stdscr.addstr(y + len(color_options) + 1, 2, "(press 1-7 to change)")
             except curses.error:
                 pass
 
@@ -494,7 +560,7 @@ def config_menu(stdscr, inventory=None):
                 pass
 
         try:
-            stdscr.addstr(h-1, 0, f"←/→: tabs  a: add  #: del  Enter: exit".ljust(w-1))
+            stdscr.addstr(h-1, 0, f"←/→: tabs  Enter: Return".ljust(w-1))
         except curses.error:
             pass
 
@@ -503,14 +569,21 @@ def config_menu(stdscr, inventory=None):
 
         if key == curses.KEY_RESIZE:
             continue
-        elif key in (ord('1'), ord('2'), ord('3')):
-            current_tab = ord(str(key)) - ord('1')
         elif key in (curses.KEY_LEFT, ord('h')):
             current_tab = (current_tab - 1) % len(TABS)
         elif key in (curses.KEY_RIGHT, ord('l')):
             current_tab = (current_tab + 1) % len(TABS)
         elif key in (10, curses.KEY_ENTER, ord('q'), ord('b')):
             break
+        elif current_tab == 1 and 49 <= key <= 55:
+            try:
+                idx = key - 49
+                color_names = list(THEME_COLORS.keys())
+                if 0 <= idx < len(color_names):
+                    THEME_COLOR = THEME_COLORS[color_names[idx]]
+                    save_config()
+            except Exception as e:
+                pass
         elif current_tab == 2 and key == ord('1'):
             try:
                 stdscr.addstr(y+11, 2, "New low stock threshold: ")
@@ -1200,6 +1273,10 @@ def view_details(stdscr, inventory, orig_idx):
                 return True
         elif key == ord('c'):
             config_menu(stdscr, inventory)
+            curses.init_pair(1, THEME_COLOR, -1)
+            curses.init_pair(2, curses.COLOR_YELLOW, -1)
+            curses.init_pair(3, curses.COLOR_RED,    -1)
+            curses.init_pair(4, curses.COLOR_GREEN,  -1)
         else:
             return False
 
@@ -1313,7 +1390,7 @@ def show_splash(stdscr):
     curses.curs_set(0)
     curses.start_color()
     curses.use_default_colors()
-    curses.init_pair(1, curses.COLOR_CYAN,   -1)
+    curses.init_pair(1, THEME_COLOR, -1)
     curses.init_pair(2, curses.COLOR_YELLOW, -1)
     curses.init_pair(3, curses.COLOR_RED,    -1)
     curses.init_pair(4, curses.COLOR_GREEN,  -1)
@@ -1373,10 +1450,11 @@ def show_splash(stdscr):
             continue
 
 def main(stdscr):
+    load_config()
     curses.curs_set(0)
     curses.start_color()
     curses.use_default_colors()
-    curses.init_pair(1, curses.COLOR_CYAN,   -1)
+    curses.init_pair(1, THEME_COLOR, -1)
     curses.init_pair(2, curses.COLOR_YELLOW, -1)
     curses.init_pair(3, curses.COLOR_RED,    -1)
     curses.init_pair(4, curses.COLOR_GREEN,  -1)
@@ -1384,7 +1462,6 @@ def main(stdscr):
     show_splash(stdscr)
 
     inventory = load_inventory()
-    load_config()
 
     selected_row_idx = 0
     search_term = ""
@@ -1454,6 +1531,10 @@ def main(stdscr):
 
         elif key == ord('c'):
             config_menu(stdscr, inventory)
+            curses.init_pair(1, THEME_COLOR, -1)
+            curses.init_pair(2, curses.COLOR_YELLOW, -1)
+            curses.init_pair(3, curses.COLOR_RED,    -1)
+            curses.init_pair(4, curses.COLOR_GREEN,  -1)
 
         elif key in (10, curses.KEY_ENTER) and filtered_len > 0:
             orig_idx = original_indices[selected_row_idx]
