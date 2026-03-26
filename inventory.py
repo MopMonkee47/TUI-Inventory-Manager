@@ -381,6 +381,7 @@ def view_sales_history(stdscr):
                 try:
                     stdscr.addstr(3, 0, "DATE       NAME                 QTY  PRICE     TOTAL    PO")
                     stdscr.addstr(4, 0, "---------- -------------------- --- -------- -------- ----------")
+                    stdscr.addstr(4, 75, "more ->")
                 except curses.error:
                     pass
 
