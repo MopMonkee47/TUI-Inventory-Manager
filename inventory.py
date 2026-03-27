@@ -33,6 +33,25 @@ QTY_W      = 6
 PRICE_W    = 12
 LOCATION_W = 10
 
+AVAILABLE_COLUMNS = {
+    'name': {'label': 'Name', 'width': 24, 'align': 'left'},
+    'quantity': {'label': 'Qty', 'width': 6, 'align': 'right'},
+    'cost': {'label': 'Cost', 'width': 12, 'align': 'center'},
+    'location': {'label': 'Location', 'width': 10, 'align': 'left'},
+    'description': {'label': 'Description', 'width': 20, 'align': 'left'},
+    'min_value': {'label': 'Min', 'width': 10, 'align': 'right'},
+    'max_value': {'label': 'Max', 'width': 10, 'align': 'right'},
+    'sale': {'label': 'Sale', 'width': 12, 'align': 'center'},
+}
+
+COLUMNS = [
+    {'key': 'name', 'width': 24},
+    {'key': 'quantity', 'width': 6},
+    {'key': 'cost', 'width': 12},
+    {'key': 'location', 'width': 10},
+    {'key': 'description', 'width': 20},
+]
+
 LOW_STOCK_THRESHOLD = 5
 CRITICAL_STOCK      = 3
 PO_ENABLED = True
@@ -70,7 +89,7 @@ THEME_COLOR = curses.COLOR_CYAN
 # ──────────────────────────────────────────────────────────────────────────────
 
 def load_config():
-    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED
+    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, COLUMNS
     if CONFIG_FILE.exists():
         try:
             with CONFIG_FILE.open('r', encoding='utf-8') as f:
@@ -81,6 +100,9 @@ def load_config():
                 PROGRAM_NAME = data.get('program_name', 'TUI Inventory')
                 SUBTITLE = data.get('subtitle', 'Track your inventory with ease')
                 PO_ENABLED = data.get('po_enabled', True)
+                saved_cols = data.get('columns', None)
+                if saved_cols:
+                    COLUMNS = saved_cols
         except Exception:
             CUSTOM_FIELDS = []
             THEME_COLOR = curses.COLOR_CYAN
@@ -89,11 +111,11 @@ def load_config():
         THEME_COLOR = curses.COLOR_CYAN
 
 def save_config(include_theme=True):
-    global PROGRAM_NAME, SUBTITLE, PO_ENABLED
+    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, COLUMNS
     with CONFIG_FILE.open('w', encoding='utf-8') as f:
         color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
         if include_theme:
-            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED}, f, indent=2)
+            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'columns': COLUMNS}, f, indent=2)
         else:
             json.dump({'custom_fields': CUSTOM_FIELDS}, f, indent=2)
 
@@ -476,6 +498,113 @@ def view_sales_history(stdscr):
             break
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Column Configuration Menu
+# ──────────────────────────────────────────────────────────────────────────────
+
+def column_config_menu(stdscr):
+    global COLUMNS, AVAILABLE_COLUMNS
+    load_config()
+    stdscr.keypad(1)
+    
+    for color_name, pair_id in THEME_COLOR_PAIRS.items():
+        curses.init_pair(pair_id, THEME_COLORS[color_name], curses.COLOR_BLACK)
+    
+    while True:
+        stdscr.clear()
+        h, w = stdscr.getmaxyx()
+        
+        if h < 15 or w < 50:
+            try:
+                stdscr.addstr(h//2 - 2, 2, "Window too small")
+                stdscr.addstr(h//2, 2, f"Need ~50×15 – current: {w}×{h}")
+            except curses.error:
+                pass
+            stdscr.refresh()
+            stdscr.getch()
+            break
+        
+        try:
+            stdscr.attron(curses.color_pair(1))
+            stdscr.addstr(0, 0, "Column Configuration".center(min(w, 100)))
+            stdscr.attroff(curses.color_pair(1))
+        except curses.error:
+            pass
+        
+        try:
+            stdscr.addstr(2, 2, "Current columns (select to toggle):")
+        except curses.error:
+            pass
+        
+        y = 4
+        for i, col in enumerate(COLUMNS):
+            key = col['key']
+            label = AVAILABLE_COLUMNS[key]['label']
+            width = col['width']
+            try:
+                stdscr.addstr(y + i, 2, f"{i+1}. {label:<12} width: {width}")
+            except curses.error:
+                pass
+        
+        try:
+            stdscr.addstr(y + 6, 2, "Available columns (toggle on/off):")
+        except curses.error:
+            pass
+        
+        y += 8
+        available_keys = [k for k in AVAILABLE_COLUMNS.keys() if k not in [c['key'] for c in COLUMNS]]
+        for i, key in enumerate(available_keys):
+            label = AVAILABLE_COLUMNS[key]['label']
+            try:
+                stdscr.addstr(y + i, 2, f"+ {label}")
+            except curses.error:
+                pass
+        
+        try:
+            stdscr.addstr(h-3, 2, "1-5: edit width  a-e: toggle off  A-E: toggle on  d: default  q: back")
+            stdscr.addstr(h-2, 2, "(max 5 columns, width 3-30)")
+        except curses.error:
+            pass
+        
+        stdscr.refresh()
+        key = stdscr.getch()
+        
+        if key == ord('q'):
+            break
+        elif key == ord('d'):
+            COLUMNS[:] = [
+                {'key': 'name', 'width': 24},
+                {'key': 'quantity', 'width': 6},
+                {'key': 'cost', 'width': 12},
+                {'key': 'location', 'width': 10},
+                {'key': 'description', 'width': 20},
+            ]
+        elif 49 <= key <= 53:
+            idx = key - 49
+            if idx < len(COLUMNS):
+                try:
+                    stdscr.addstr(h-1, 2, f"New width for {COLUMNS[idx]['key']}: ".ljust(w-3))
+                    stdscr.refresh()
+                    curses.echo()
+                    val = stdscr.getstr(h-1, 22, 3).decode('utf-8').strip()
+                    curses.noecho()
+                    if val.isdigit():
+                        w_new = max(3, min(30, int(val)))
+                        COLUMNS[idx]['width'] = w_new
+                except:
+                    curses.noecho()
+        elif key in [ord('a'), ord('b'), ord('c'), ord('d'), ord('e')]:
+            idx = key - ord('a')
+            if idx < len(COLUMNS):
+                removed = COLUMNS.pop(idx)
+        elif key in [ord('A'), ord('B'), ord('C'), ord('D'), ord('E')]:
+            idx = key - ord('A')
+            if idx < len(available_keys) and len(COLUMNS) < 5:
+                key_to_add = available_keys[idx]
+                COLUMNS.append({'key': key_to_add, 'width': AVAILABLE_COLUMNS[key_to_add]['width']})
+    
+    save_config()
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Custom Fields Configuration Menu
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -600,15 +729,12 @@ def config_menu(stdscr, inventory=None):
             y = content_top
             try:
                 stdscr.addstr(y, 2, "Display Settings")
-                stdscr.addstr(y+2, 2, f"Name width:    {NAME_W}")
-                stdscr.addstr(y+3, 2, f"Quantity width: {QTY_W}")
-                stdscr.addstr(y+4, 2, f"Price width:    {PRICE_W}")
-                stdscr.addstr(y+5, 2, f"Location width: {LOCATION_W}")
-                stdscr.addstr(y+7, 2, f"1. Low stock threshold:  {LOW_STOCK_THRESHOLD}")
-                stdscr.addstr(y+8, 2, f"2. Critical stock:       {CRITICAL_STOCK}")
+                stdscr.addstr(y+2, 2, f"1. Low stock threshold:  {LOW_STOCK_THRESHOLD}")
+                stdscr.addstr(y+3, 2, f"2. Critical stock:       {CRITICAL_STOCK}")
                 po_status = "On" if PO_ENABLED else "Off"
-                stdscr.addstr(y+9, 2, f"3. PO Number:            {po_status}")
-                stdscr.addstr(y+11, 2, "(press 1, 2, or 3 to edit)")
+                stdscr.addstr(y+4, 2, f"3. PO Number:            {po_status}")
+                stdscr.addstr(y+5, 2, "4. Column settings")
+                stdscr.addstr(y+7, 2, "(press 1-4 to edit)")
             except curses.error:
                 pass
 
@@ -686,6 +812,8 @@ def config_menu(stdscr, inventory=None):
         elif current_tab == 2 and key == ord('3'):
             PO_ENABLED = not PO_ENABLED
             save_config()
+        elif current_tab == 2 and key == ord('4'):
+            column_config_menu(stdscr)
         elif current_tab == 0 and key == ord('a'):
                 if len(CUSTOM_FIELDS) >= 5:
                     try:
@@ -1367,6 +1495,7 @@ def search_mode(stdscr):
     return term.strip()
 
 def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='name', sort_directions=None):
+    global COLUMNS, AVAILABLE_COLUMNS
     if sort_directions is None:
         sort_directions = {'name': 1, 'quantity': 1, 'location': 1}
 
@@ -1381,7 +1510,7 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     if sort_key == 'name':
         filtered.sort(key=lambda x: x.name.lower(), reverse=(direction < 0))
     elif sort_key == 'quantity':
-        filtered.sort(key=lambda x: x.quantity, reverse=(direction < 0))  # ← fixed direction logic
+        filtered.sort(key=lambda x: x.quantity, reverse=(direction < 0))
     elif sort_key == 'location':
         filtered.sort(key=lambda x: x.location.lower(), reverse=(direction < 0))
 
@@ -1396,7 +1525,18 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
 
     stdscr.addstr(2, 0, "-" * min(w, 100))
 
-    headers = "Name".ljust(NAME_W) + "Qty".rjust(QTY_W) + "Cost".center(PRICE_W) + "Location".ljust(LOCATION_W) + " Description"
+    header_parts = []
+    for col in COLUMNS:
+        label = AVAILABLE_COLUMNS[col['key']]['label']
+        width = col['width']
+        align = AVAILABLE_COLUMNS[col['key']]['align']
+        if align == 'right':
+            header_parts.append(label.rjust(width))
+        elif align == 'center':
+            header_parts.append(label.center(width))
+        else:
+            header_parts.append(label.ljust(width))
+    headers = "  ".join(header_parts)
     stdscr.attron(curses.color_pair(1))
     stdscr.addstr(3, 0, headers[:w])
     stdscr.attroff(curses.color_pair(1))
@@ -1405,15 +1545,33 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
         y = idx + 4
         if y >= h - 3: break
 
-        name_disp = (item.name[:NAME_W-2] + '…') if len(item.name) >= NAME_W-1 else item.name
-        qty_part  = f"{item.quantity:,}".rjust(QTY_W)
-        cost_part = f"${item.cost:,.2f}".center(PRICE_W)
-        loc_disp  = (item.location[:LOCATION_W-2] + '…') if len(item.location) >= LOCATION_W-1 else item.location
-        desc_avail = max(10, w - (NAME_W + QTY_W + PRICE_W + LOCATION_W + 9))
-        desc_text = item.description.replace("\n", " ").replace("\r", " ")
-        desc_part = (desc_text[:desc_avail-1] + '…') if len(desc_text) > desc_avail else desc_text
-
-        line = name_disp.ljust(NAME_W) + qty_part + cost_part + loc_disp.ljust(LOCATION_W) + " " + desc_part
+        row_parts = []
+        for col in COLUMNS:
+            key = col['key']
+            width = col['width']
+            align = AVAILABLE_COLUMNS[key]['align']
+            value = getattr(item, key, '')
+            if value is None:
+                value = ''
+            
+            if key == 'quantity':
+                disp = f"{value:,}"
+            elif key in ('cost', 'min_value', 'max_value', 'sale'):
+                disp = f"${value:,.2f}"
+            else:
+                disp = str(value)
+            
+            if len(disp) >= width - 1:
+                disp = disp[:width-2] + '…'
+            
+            if align == 'right':
+                row_parts.append(disp.rjust(width))
+            elif align == 'center':
+                row_parts.append(disp.center(width))
+            else:
+                row_parts.append(disp.ljust(width))
+        
+        line = "  ".join(row_parts)
 
         color_pair = 0
         if item.stock_status == "critical": color_pair = 3
