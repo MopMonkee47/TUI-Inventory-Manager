@@ -39,6 +39,10 @@ CRITICAL_STOCK      = 3
 # Global custom fields
 CUSTOM_FIELDS = []  # [{'name':str, 'label':str, 'type':'text'|'number'|'money'}, ...]
 
+# Program display names
+PROGRAM_NAME = "TUI Inventory"
+SUBTITLE = "Track your inventory with ease"
+
 # Theme color settings
 THEME_COLORS = {
     'cyan': curses.COLOR_CYAN,
@@ -65,7 +69,7 @@ THEME_COLOR = curses.COLOR_CYAN
 # ──────────────────────────────────────────────────────────────────────────────
 
 def load_config():
-    global CUSTOM_FIELDS, THEME_COLOR
+    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE
     if CONFIG_FILE.exists():
         try:
             with CONFIG_FILE.open('r', encoding='utf-8') as f:
@@ -73,6 +77,8 @@ def load_config():
                 CUSTOM_FIELDS = data.get('custom_fields', [])[:5]
                 color_name = data.get('theme_color', 'cyan')
                 THEME_COLOR = THEME_COLORS.get(color_name, curses.COLOR_CYAN)
+                PROGRAM_NAME = data.get('program_name', 'TUI Inventory')
+                SUBTITLE = data.get('subtitle', 'Track your inventory with ease')
         except Exception:
             CUSTOM_FIELDS = []
             THEME_COLOR = curses.COLOR_CYAN
@@ -81,10 +87,11 @@ def load_config():
         THEME_COLOR = curses.COLOR_CYAN
 
 def save_config(include_theme=True):
+    global PROGRAM_NAME, SUBTITLE
     with CONFIG_FILE.open('w', encoding='utf-8') as f:
         color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
         if include_theme:
-            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name}, f, indent=2)
+            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE}, f, indent=2)
         else:
             json.dump({'custom_fields': CUSTOM_FIELDS}, f, indent=2)
 
@@ -453,7 +460,7 @@ def view_sales_history(stdscr):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def config_menu(stdscr, inventory=None):
-    global CUSTOM_FIELDS, LOW_STOCK_THRESHOLD, CRITICAL_STOCK, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS
+    global CUSTOM_FIELDS, LOW_STOCK_THRESHOLD, CRITICAL_STOCK, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE
 
     load_config()
     stdscr.keypad(1)
@@ -484,7 +491,7 @@ def config_menu(stdscr, inventory=None):
 
         try:
             stdscr.attron(curses.color_pair(1))
-            stdscr.addstr(0, 0, "App Configuration".center(min(w, 100)))
+            stdscr.addstr(0, 0, (PROGRAM_NAME + " Settings").center(min(w, 100)))
             stdscr.attroff(curses.color_pair(1))
         except curses.error:
             pass
@@ -556,7 +563,16 @@ def config_menu(stdscr, inventory=None):
                         stdscr.attroff(curses.color_pair(THEME_COLOR_PAIRS[color_name]))
                     except curses.error:
                         pass
-                stdscr.addstr(y + len(color_options) + 1, 2, "(press 1-7 to change)")
+                y += len(color_options) + 1
+                stdscr.addstr(y, 2, "(press 1-7 to change)")
+                y += 2
+                stdscr.addstr(y, 2, "Program Name (max 40 chars):")
+                stdscr.addstr(y+1, 2, f"  {PROGRAM_NAME}")
+                y += 2
+                stdscr.addstr(y, 2, "Subtitle (max 40 chars):")
+                stdscr.addstr(y+1, 2, f"  {SUBTITLE}")
+                y += 3
+                stdscr.addstr(y, 2, "n: edit name  s: edit subtitle")
             except curses.error:
                 pass
 
@@ -599,6 +615,30 @@ def config_menu(stdscr, inventory=None):
                     save_config()
             except Exception as e:
                 pass
+        elif current_tab == 1 and key == ord('n'):
+            try:
+                stdscr.addstr(y+12, 2, "Enter new program name: ".ljust(w-3))
+                stdscr.refresh()
+                curses.echo()
+                new_name = stdscr.getstr(y+12, 24, 40).decode('utf-8').strip()
+                curses.noecho()
+                if new_name:
+                    PROGRAM_NAME = new_name
+                    save_config()
+            except:
+                curses.noecho()
+        elif current_tab == 1 and key == ord('s'):
+            try:
+                stdscr.addstr(y+13, 2, "Enter new subtitle: ".ljust(w-3))
+                stdscr.refresh()
+                curses.echo()
+                new_sub = stdscr.getstr(y+13, 21, 40).decode('utf-8').strip()
+                curses.noecho()
+                if new_sub:
+                    SUBTITLE = new_sub
+                    save_config()
+            except:
+                curses.noecho()
         elif current_tab == 2 and key == ord('1'):
             try:
                 stdscr.addstr(y+11, 2, "New low stock threshold: ")
@@ -1323,7 +1363,7 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     original_indices = [inventory.index(item) for item in filtered]
 
     stdscr.attron(curses.color_pair(1))
-    stdscr.addstr(0, 0, "Inventory Tracker".center(min(w, 100)))
+    stdscr.addstr(0, 0, PROGRAM_NAME.center(min(w, 100)))
     stdscr.attroff(curses.color_pair(1))
 
     dir_symbol = "↓" if direction > 0 else "↑"
@@ -1435,10 +1475,10 @@ def show_splash(stdscr):
             stdscr.attron(cy)
             stdscr.addstr(box_y,     box_x,     "┌" + "─" * inner_w + "┐")
             stdscr.addstr(box_y + 1, box_x,     "│" + " " * inner_w + "│")
-            stdscr.addstr(box_y + 2, box_x,     "│" + "TUI Inventory".center(inner_w) + "│")
+            stdscr.addstr(box_y + 2, box_x,     "│" + PROGRAM_NAME.center(inner_w) + "│")
             stdscr.addstr(box_y + 3, box_x,     "│" + "─" * 36 + "─".rjust(inner_w - 36) + "│")
             stdscr.addstr(box_y + 4, box_x,     "│" + " " * inner_w + "│")
-            stdscr.addstr(box_y + 5, box_x,     "│" + "Track your inventory with ease".center(inner_w) + "│")
+            stdscr.addstr(box_y + 5, box_x,     "│" + SUBTITLE.center(inner_w) + "│")
             stdscr.addstr(box_y + 6, box_x,     "│" + " " * inner_w + "│")
             stdscr.addstr(box_y + 7, box_x,     "│" + "[ Add • Edit • Sell • Search ]".center(inner_w) + "│")
             stdscr.addstr(box_y + 8, box_x,     "│" + " " * inner_w + "│")
