@@ -35,6 +35,7 @@ LOCATION_W = 10
 
 LOW_STOCK_THRESHOLD = 5
 CRITICAL_STOCK      = 3
+PO_ENABLED = True
 
 # Global custom fields
 CUSTOM_FIELDS = []  # [{'name':str, 'label':str, 'type':'text'|'number'|'money'}, ...]
@@ -69,7 +70,7 @@ THEME_COLOR = curses.COLOR_CYAN
 # ──────────────────────────────────────────────────────────────────────────────
 
 def load_config():
-    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE
+    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED
     if CONFIG_FILE.exists():
         try:
             with CONFIG_FILE.open('r', encoding='utf-8') as f:
@@ -79,6 +80,7 @@ def load_config():
                 THEME_COLOR = THEME_COLORS.get(color_name, curses.COLOR_CYAN)
                 PROGRAM_NAME = data.get('program_name', 'TUI Inventory')
                 SUBTITLE = data.get('subtitle', 'Track your inventory with ease')
+                PO_ENABLED = data.get('po_enabled', True)
         except Exception:
             CUSTOM_FIELDS = []
             THEME_COLOR = curses.COLOR_CYAN
@@ -87,11 +89,11 @@ def load_config():
         THEME_COLOR = curses.COLOR_CYAN
 
 def save_config(include_theme=True):
-    global PROGRAM_NAME, SUBTITLE
+    global PROGRAM_NAME, SUBTITLE, PO_ENABLED
     with CONFIG_FILE.open('w', encoding='utf-8') as f:
         color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
         if include_theme:
-            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE}, f, indent=2)
+            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED}, f, indent=2)
         else:
             json.dump({'custom_fields': CUSTOM_FIELDS}, f, indent=2)
 
@@ -211,6 +213,7 @@ def safe_save_inventory(inventory):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def record_sale(inventory, orig_idx, qty_sold, price_each, po_number=None):
+    global PO_ENABLED
     if not (0 <= orig_idx < len(inventory)):
         return False
     item = inventory[orig_idx]
@@ -221,13 +224,14 @@ def record_sale(inventory, orig_idx, qty_sold, price_each, po_number=None):
     total = qty_sold * price_each
 
     timestamp = datetime.now().isoformat(timespec='seconds')
+    po_value = "N/A" if not PO_ENABLED else (po_number or '')
     row = {
         'timestamp': timestamp,
         'name': item.name,
         'quantity_sold': qty_sold,
         'price_each': f"{price_each:.2f}",
         'total': f"{total:.2f}",
-        'po_number': po_number or '',
+        'po_number': po_value,
         'remaining_stock': item.quantity
     }
 
@@ -244,6 +248,8 @@ def record_sale(inventory, orig_idx, qty_sold, price_each, po_number=None):
     return True
 
 def record_sale_ui(stdscr, inventory, orig_idx):
+    global PO_ENABLED
+    load_config()
     if not (0 <= orig_idx < len(inventory)):
         return False
     item = inventory[orig_idx]
@@ -280,28 +286,42 @@ def record_sale_ui(stdscr, inventory, orig_idx):
         stdscr.getch()
         return False
 
-    while True:
-        stdscr.addstr(10, 0, " " * (curses.COLS - 1))
-        stdscr.addstr(9, 0, " " * (curses.COLS - 1))
-        po_str = get_input(stdscr, "PO Number (optional, 20 max): ", 9, 0, 20, "")
-        po_number = po_str.strip() if po_str else ""
+    po_number = ""
+    if PO_ENABLED:
+        while True:
+            stdscr.addstr(10, 0, " " * (curses.COLS - 1))
+            stdscr.addstr(9, 0, " " * (curses.COLS - 1))
+            po_str = get_input(stdscr, "PO Number (optional, 20 max): ", 9, 0, 20, "")
+            po_number = po_str.strip() if po_str else ""
 
+            total = qty_sold * price_each
+            po_display = f"PO: {po_number}" if po_number else "PO: -"
+            confirm = f"Sell {qty_sold:,} × {item.name} @ ${price_each:,.2f} = ${total:,.2f} ? (y/n/r)"
+            stdscr.addstr(7, 0, po_display)
+            stdscr.addstr(10, 0, confirm[:curses.COLS-1])
+            stdscr.refresh()
+
+            ch = stdscr.getch()
+            if ch in (ord('r'), ord('R')):
+                continue
+            elif ch not in (ord('y'), ord('Y'), ord(' ')):
+                stdscr.addstr(12, 0, "Cancelled. Press any key...")
+                stdscr.getch()
+                return False
+            else:
+                break
+    else:
         total = qty_sold * price_each
-        po_display = f"PO: {po_number}" if po_number else "PO: -"
-        confirm = f"Sell {qty_sold:,} × {item.name} @ ${price_each:,.2f} = ${total:,.2f} ? (y/n/r)"
+        po_display = "PO: N/A (disabled)"
+        confirm = f"Sell {qty_sold:,} × {item.name} @ ${price_each:,.2f} = ${total:,.2f} ? (y/n)"
         stdscr.addstr(7, 0, po_display)
-        stdscr.addstr(10, 0, confirm[:curses.COLS-1])
+        stdscr.addstr(9, 0, confirm[:curses.COLS-1])
         stdscr.refresh()
-
         ch = stdscr.getch()
-        if ch in (ord('r'), ord('R')):
-            continue
-        elif ch not in (ord('y'), ord('Y'), ord(' ')):
-            stdscr.addstr(12, 0, "Cancelled. Press any key...")
+        if ch not in (ord('y'), ord('Y'), ord(' ')):
+            stdscr.addstr(11, 0, "Cancelled. Press any key...")
             stdscr.getch()
             return False
-        else:
-            break
 
     success = record_sale(inventory, orig_idx, qty_sold, price_each, po_number)
     stdscr.addstr(9, 0, " " * (curses.COLS - 1))
@@ -460,7 +480,7 @@ def view_sales_history(stdscr):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def config_menu(stdscr, inventory=None):
-    global CUSTOM_FIELDS, LOW_STOCK_THRESHOLD, CRITICAL_STOCK, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE
+    global CUSTOM_FIELDS, LOW_STOCK_THRESHOLD, CRITICAL_STOCK, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED
 
     load_config()
     stdscr.keypad(1)
@@ -585,8 +605,10 @@ def config_menu(stdscr, inventory=None):
                 stdscr.addstr(y+4, 2, f"Price width:    {PRICE_W}")
                 stdscr.addstr(y+5, 2, f"Location width: {LOCATION_W}")
                 stdscr.addstr(y+7, 2, f"1. Low stock threshold:  {LOW_STOCK_THRESHOLD}")
-                stdscr.addstr(y+8, 2, f"2. Critical stock:      {CRITICAL_STOCK}")
-                stdscr.addstr(y+10, 2, "(press 1 or 2 to edit)")
+                stdscr.addstr(y+8, 2, f"2. Critical stock:       {CRITICAL_STOCK}")
+                po_status = "On" if PO_ENABLED else "Off"
+                stdscr.addstr(y+9, 2, f"3. PO Number:            {po_status}")
+                stdscr.addstr(y+11, 2, "(press 1, 2, or 3 to edit)")
             except curses.error:
                 pass
 
@@ -661,6 +683,9 @@ def config_menu(stdscr, inventory=None):
                     CRITICAL_STOCK = int(val)
             except:
                 curses.noecho()
+        elif current_tab == 2 and key == ord('3'):
+            PO_ENABLED = not PO_ENABLED
+            save_config()
         elif current_tab == 0 and key == ord('a'):
                 if len(CUSTOM_FIELDS) >= 5:
                     try:
