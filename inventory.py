@@ -443,13 +443,18 @@ def view_sales_history(stdscr):
                     pass
 
                 try:
-                    stdscr.addstr(3, 0, "DATE       NAME                 QTY  PRICE     TOTAL    PO")
-                    stdscr.addstr(4, 0, "---------- -------------------- --- -------- -------- ----------")
-                    stdscr.addstr(4, 75, "more ->")
+                    stdscr.addstr(2, 0, "─" * min(w, 80))
                 except curses.error:
                     pass
 
-                y = 5
+                try:
+                    stdscr.addstr(5, 0, "DATE       NAME                 QTY  PRICE     TOTAL    PO")
+                    stdscr.addstr(6, 0, "---------- -------------------- --- -------- -------- ----------")
+                    stdscr.addstr(6, 75, "more ->")
+                except curses.error:
+                    pass
+
+                y = 7
 
                 max_lines = h - y - 4
                 for row in rows[:max_lines]:
@@ -1620,7 +1625,7 @@ def view_details(stdscr, inventory, orig_idx):
         h, w = stdscr.getmaxyx()
         stdscr.addstr(h-2, 0, "·" * min(w, 80))
 
-        stdscr.addstr(h-1, 0, "e = edit   d = delete   c = config fields   Enter = back")
+        stdscr.addstr(h-1, 0, "e:edit   d:delete   c:configuration   Enter:back")
         stdscr.refresh()
 
         key = stdscr.getch()
@@ -1823,7 +1828,7 @@ def show_splash(stdscr):
             stdscr.addstr(box_y,     box_x,     "┌" + "─" * inner_w + "┐")
             stdscr.addstr(box_y + 1, box_x,     "│" + " " * inner_w + "│")
             stdscr.addstr(box_y + 2, box_x,     "│" + PROGRAM_NAME.center(inner_w) + "│")
-            stdscr.addstr(box_y + 3, box_x,     "│" + "─" * 36 + "─".rjust(inner_w - 36) + "│")
+            stdscr.addstr(box_y + 3, box_x,     "│" + "─" * inner_w + "│")
             stdscr.addstr(box_y + 4, box_x,     "│" + " " * inner_w + "│")
             stdscr.addstr(box_y + 5, box_x,     "│" + SUBTITLE.center(inner_w) + "│")
             stdscr.addstr(box_y + 6, box_x,     "│" + " " * inner_w + "│")
