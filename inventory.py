@@ -551,7 +551,7 @@ def column_config_menu(stdscr):
         all_columns.sort(key=lambda c: AVAILABLE_COLUMNS[c['key']]['label'])
         
         try:
-            stdscr.addstr(2, 2, "Columns (j/k: scroll, Enter: toggle, +/-: width, a: align L/C/R):")
+            stdscr.addstr(2, 2, "Columns (Arrows: scroll, Enter: toggle, +/-: width, a: align L/C/R):")
         except curses.error:
             pass
         
@@ -632,7 +632,7 @@ def column_config_menu(stdscr):
                     pass
         
         try:
-            stdscr.addstr(h-3, 2, "Enter/j/k: toggle  +/-: width  a: align  d: default  q: back")
+            stdscr.addstr(h-3, 2, "Enter/Arrows: toggle  +/-: width  a: align  d: default  q: back")
             stdscr.addstr(h-2, 2, "(max 5 columns, width 3-30)")
         except curses.error:
             pass
