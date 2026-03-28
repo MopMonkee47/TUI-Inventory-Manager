@@ -939,7 +939,7 @@ def config_menu(stdscr, inventory=None):
                 stdscr.addstr(y+11, 2, "New low stock threshold: ")
                 stdscr.refresh()
                 curses.echo()
-                val = stdscr.getstr(y+11, 25, 5).decode('utf-8').strip()
+                val = stdscr.getstr(y+11, 26, 5).decode('utf-8').strip()
                 curses.noecho()
                 if val.isdigit():
                     LOW_STOCK_THRESHOLD = int(val)
@@ -950,7 +950,7 @@ def config_menu(stdscr, inventory=None):
                 stdscr.addstr(y+11, 2, "New critical stock level: ")
                 stdscr.refresh()
                 curses.echo()
-                val = stdscr.getstr(y+11, 26, 5).decode('utf-8').strip()
+                val = stdscr.getstr(y+11, 27, 5).decode('utf-8').strip()
                 curses.noecho()
                 if val.isdigit():
                     CRITICAL_STOCK = int(val)

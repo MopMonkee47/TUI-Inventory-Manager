@@ -164,6 +164,8 @@ Each inventory item is represented by an `Item` instance with 8 built-in fields 
 
 **Note:** When adding new toggle options to Display Settings, ensure the On/Off values align with existing options (e.g., `"  {po_status}"` for PO Number). Use consistent spacing to maintain visual alignment.
 
+**Input cursor positioning:** When prompting for user input with a colon (e.g., "Enter new value: "), the cursor position for `getstr()` should be the starting column plus the length of the prompt string. This ensures the cursor starts after the colon and space, not overwriting the prompt. For example, a prompt starting at column 2 with "Value: " (8 chars) uses position 2 + 8 = 10.
+
 **Adding a custom field** prompts for:
 1. **Label** -- Display name (e.g., "Color")
 2. **Key** -- Internal storage key (auto-generated from label, e.g., "color")
