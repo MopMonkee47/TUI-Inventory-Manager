@@ -56,6 +56,7 @@ LOW_STOCK_THRESHOLD = 5
 CRITICAL_STOCK      = 3
 PO_ENABLED = True
 MONETIZATION_ENABLED = True
+COLOR_CRITICAL_ENABLED = True
 
 # Global custom fields
 CUSTOM_FIELDS = []  # [{'name':str, 'label':str, 'type':'text'|'number'|'money'}, ...]
@@ -90,7 +91,7 @@ THEME_COLOR = curses.COLOR_CYAN
 # ──────────────────────────────────────────────────────────────────────────────
 
 def load_config():
-    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLUMNS
+    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, COLUMNS
     if CONFIG_FILE.exists():
         try:
             with CONFIG_FILE.open('r', encoding='utf-8') as f:
@@ -102,6 +103,7 @@ def load_config():
                 SUBTITLE = data.get('subtitle', 'Track your inventory with ease')
                 PO_ENABLED = data.get('po_enabled', True)
                 MONETIZATION_ENABLED = data.get('monetization_enabled', True)
+                COLOR_CRITICAL_ENABLED = data.get('color_critical_enabled', True)
                 saved_cols = data.get('columns', None)
                 if saved_cols:
                     COLUMNS = saved_cols
@@ -113,11 +115,11 @@ def load_config():
         THEME_COLOR = curses.COLOR_CYAN
 
 def save_config(include_theme=True):
-    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLUMNS
+    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, COLUMNS
     with CONFIG_FILE.open('w', encoding='utf-8') as f:
         color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
         if include_theme:
-            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'columns': COLUMNS}, f, indent=2)
+            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'color_critical_enabled': COLOR_CRITICAL_ENABLED, 'columns': COLUMNS}, f, indent=2)
         else:
             json.dump({'custom_fields': CUSTOM_FIELDS}, f, indent=2)
 
@@ -758,7 +760,7 @@ def column_config_menu(stdscr):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def config_menu(stdscr, inventory=None):
-    global CUSTOM_FIELDS, LOW_STOCK_THRESHOLD, CRITICAL_STOCK, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED
+    global CUSTOM_FIELDS, LOW_STOCK_THRESHOLD, CRITICAL_STOCK, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED
 
     load_config()
     stdscr.keypad(1)
@@ -878,14 +880,16 @@ def config_menu(stdscr, inventory=None):
             y = content_top
             try:
                 stdscr.addstr(y, 2, "Display Settings")
-                stdscr.addstr(y+2, 2, f"1. Low stock threshold:  {LOW_STOCK_THRESHOLD}")
-                stdscr.addstr(y+3, 2, f"2. Critical stock:       {CRITICAL_STOCK}")
+                color_crit_status = "On" if COLOR_CRITICAL_ENABLED else "Off"
+                stdscr.addstr(y+2, 2, f"1. Stock alerts:         {color_crit_status}")
+                stdscr.addstr(y+3, 2, f"2. Low stock threshold:  {LOW_STOCK_THRESHOLD}")
+                stdscr.addstr(y+4, 2, f"3. Critical stock:       {CRITICAL_STOCK}")
                 po_status = "On" if PO_ENABLED else "Off"
-                stdscr.addstr(y+4, 2, f"3. PO Number:            {po_status}")
+                stdscr.addstr(y+5, 2, f"4. PO Number:            {po_status}")
                 mon_status = "On" if MONETIZATION_ENABLED else "Off"
-                stdscr.addstr(y+5, 2, f"4. Monetization:         {mon_status}")
-                stdscr.addstr(y+6, 2, "5. Column settings")
-                stdscr.addstr(y+8, 2, "(press 1-5 to edit)")
+                stdscr.addstr(y+6, 2, f"5. Monetization:         {mon_status}")
+                stdscr.addstr(y+7, 2, "6. Column settings")
+                stdscr.addstr(y+9, 2, "(press 1-6 to edit)")
             except curses.error:
                 pass
 
@@ -927,34 +931,21 @@ def config_menu(stdscr, inventory=None):
                     save_config()
             except:
                 curses.noecho()
-        elif current_tab == 1 and key == ord('s'):
-            try:
-                stdscr.addstr(y+13, 2, "Enter new subtitle: ".ljust(w-3))
-                stdscr.refresh()
-                curses.echo()
-                new_sub = stdscr.getstr(y+13, 22, 40).decode('utf-8').strip()
-                curses.noecho()
-                if new_sub:
-                    SUBTITLE = new_sub
-                    save_config()
-            except:
-                curses.noecho()
-        elif current_tab == 1 and key == ord('r'):
-            PROGRAM_NAME = "TUI Inventory"
-            SUBTITLE = "Track your inventory with ease"
-            save_config()
         elif current_tab == 2 and key == ord('1'):
+            COLOR_CRITICAL_ENABLED = not COLOR_CRITICAL_ENABLED
+            save_config()
+        elif current_tab == 2 and key == ord('2'):
             try:
                 stdscr.addstr(y+11, 2, "New low stock threshold: ")
                 stdscr.refresh()
                 curses.echo()
-                val = stdscr.getstr(y+11, 26, 5).decode('utf-8').strip()
+                val = stdscr.getstr(y+11, 25, 5).decode('utf-8').strip()
                 curses.noecho()
                 if val.isdigit():
                     LOW_STOCK_THRESHOLD = int(val)
             except:
                 curses.noecho()
-        elif current_tab == 2 and key == ord('2'):
+        elif current_tab == 2 and key == ord('3'):
             try:
                 stdscr.addstr(y+11, 2, "New critical stock level: ")
                 stdscr.refresh()
@@ -965,13 +956,13 @@ def config_menu(stdscr, inventory=None):
                     CRITICAL_STOCK = int(val)
             except:
                 curses.noecho()
-        elif current_tab == 2 and key == ord('3'):
+        elif current_tab == 2 and key == ord('4'):
             PO_ENABLED = not PO_ENABLED
             save_config()
-        elif current_tab == 2 and key == ord('4'):
+        elif current_tab == 2 and key == ord('5'):
             MONETIZATION_ENABLED = not MONETIZATION_ENABLED
             save_config()
-        elif current_tab == 2 and key == ord('5'):
+        elif current_tab == 2 and key == ord('6'):
             column_config_menu(stdscr)
         elif current_tab == 0 and key == ord('a'):
                 if len(CUSTOM_FIELDS) >= 5:
@@ -1658,6 +1649,7 @@ def search_mode(stdscr):
 
 def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='name', sort_directions=None):
     global COLUMNS, AVAILABLE_COLUMNS
+    load_config()
     if sort_directions is None:
         sort_directions = {'name': 1, 'quantity': 1, 'location': 1}
 
@@ -1743,8 +1735,9 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
         line = "  ".join(row_parts)
 
         color_pair = 0
-        if item.stock_status == "critical": color_pair = 3
-        elif item.stock_status == "low":    color_pair = 2
+        if COLOR_CRITICAL_ENABLED:
+            if item.stock_status == "critical": color_pair = 3
+            elif item.stock_status == "low":    color_pair = 2
 
         if color_pair: stdscr.attron(curses.color_pair(color_pair))
         if idx == selected_row_idx: stdscr.attron(curses.A_REVERSE | curses.color_pair(4))

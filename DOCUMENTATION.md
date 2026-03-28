@@ -155,10 +155,14 @@ Each inventory item is represented by an `Item` instance with 8 built-in fields 
 - Subtitle (s): Customize the subtitle shown below the title
 
 **Display Tab Options:**
-- Low stock threshold (1): Set quantity threshold for yellow warning
-- Critical stock (2): Set quantity threshold for red critical warning
-- PO Number (3): Toggle PO number tracking on/off for sales
-- Column settings (4): Open column configuration menu
+- Stock alerts (1): Toggle yellow/red coloring for low/critical stock items
+- Low stock threshold (2): Set quantity threshold for yellow warning
+- Critical stock (3): Set quantity threshold for red critical warning
+- PO Number (4): Toggle PO number tracking on/off for sales
+- Monetization (5): Toggle price input when recording sales
+- Column settings (6): Open column configuration menu
+
+**Note:** When adding new toggle options to Display Settings, ensure the On/Off values align with existing options (e.g., `"  {po_status}"` for PO Number). Use consistent spacing to maintain visual alignment.
 
 **Adding a custom field** prompts for:
 1. **Label** -- Display name (e.g., "Color")
