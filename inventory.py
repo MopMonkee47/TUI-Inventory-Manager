@@ -52,8 +52,6 @@ COLUMNS = [
     {'key': 'description', 'width': 20, 'align': 'left'},
 ]
 
-LOW_STOCK_THRESHOLD = 5
-CRITICAL_STOCK      = 3
 PO_ENABLED = True
 MONETIZATION_ENABLED = True
 COLOR_CRITICAL_ENABLED = True
@@ -152,8 +150,16 @@ class Item:
 
     @property
     def stock_status(self):
-        if self.quantity <= CRITICAL_STOCK: return "critical"
-        if self.quantity <= LOW_STOCK_THRESHOLD: return "low"
+        try:
+            critical = int(self.custom.get('critical_stock', 3) or 3)
+        except (ValueError, TypeError):
+            critical = 3
+        try:
+            low = int(self.custom.get('low_stock_threshold', 5) or 5)
+        except (ValueError, TypeError):
+            low = 5
+        if self.quantity <= critical: return "critical"
+        if self.quantity <= low: return "low"
         return "ok"
 
     def to_dict(self):
@@ -886,15 +892,13 @@ def config_menu(stdscr, inventory=None):
             try:
                 stdscr.addstr(y, 2, "Display Settings")
                 color_crit_status = "On" if COLOR_CRITICAL_ENABLED else "Off"
-                stdscr.addstr(y+2, 2, f"1. Stock alerts:         {color_crit_status}")
-                stdscr.addstr(y+3, 2, f"2. Low stock threshold:  {LOW_STOCK_THRESHOLD}")
-                stdscr.addstr(y+4, 2, f"3. Critical stock:       {CRITICAL_STOCK}")
+                stdscr.addstr(y+2, 2, f"1. Show stock alerts:   {color_crit_status}")
                 po_status = "On" if PO_ENABLED else "Off"
-                stdscr.addstr(y+5, 2, f"4. PO Number:            {po_status}")
+                stdscr.addstr(y+3, 2, f"2. PO Number:            {po_status}")
                 mon_status = "On" if MONETIZATION_ENABLED else "Off"
-                stdscr.addstr(y+6, 2, f"5. Monetization:         {mon_status}")
-                stdscr.addstr(y+7, 2, "6. Column settings")
-                stdscr.addstr(y+9, 2, "(press 1-6 to edit)")
+                stdscr.addstr(y+4, 2, f"3. Monetization:         {mon_status}")
+                stdscr.addstr(y+5, 2, "4. Column settings")
+                stdscr.addstr(y+7, 2, "(press 1-4 to edit)")
             except curses.error:
                 pass
 
@@ -940,34 +944,12 @@ def config_menu(stdscr, inventory=None):
             COLOR_CRITICAL_ENABLED = not COLOR_CRITICAL_ENABLED
             save_config()
         elif current_tab == 2 and key == ord('2'):
-            try:
-                stdscr.addstr(y+11, 2, "New low stock threshold: ")
-                stdscr.refresh()
-                curses.echo()
-                val = stdscr.getstr(y+11, 26, 5).decode('utf-8').strip()
-                curses.noecho()
-                if val.isdigit():
-                    LOW_STOCK_THRESHOLD = int(val)
-            except:
-                curses.noecho()
-        elif current_tab == 2 and key == ord('3'):
-            try:
-                stdscr.addstr(y+11, 2, "New critical stock level: ")
-                stdscr.refresh()
-                curses.echo()
-                val = stdscr.getstr(y+11, 27, 5).decode('utf-8').strip()
-                curses.noecho()
-                if val.isdigit():
-                    CRITICAL_STOCK = int(val)
-            except:
-                curses.noecho()
-        elif current_tab == 2 and key == ord('4'):
             PO_ENABLED = not PO_ENABLED
             save_config()
-        elif current_tab == 2 and key == ord('5'):
+        elif current_tab == 2 and key == ord('3'):
             MONETIZATION_ENABLED = not MONETIZATION_ENABLED
             save_config()
-        elif current_tab == 2 and key == ord('6'):
+        elif current_tab == 2 and key == ord('4'):
             column_config_menu(stdscr)
         elif current_tab == 0 and key == ord('a'):
                 if len(CUSTOM_FIELDS) >= 5:
@@ -1093,7 +1075,10 @@ def add_item(stdscr, inventory):
         stdscr.getch()
         return
 
-    inventory.append(Item(name, int(quantity), float(cost), 0.0, 0.0, 0.0, location, description))
+    new_item = Item(name, int(quantity), float(cost), 0.0, 0.0, 0.0, location, description)
+    new_item.custom['low_stock_threshold'] = 5
+    new_item.custom['critical_stock'] = 3
+    inventory.append(new_item)
     safe_save_inventory(inventory)
     stdscr.addstr(10, 0, "Item added. Press any key...")
     stdscr.getch()
@@ -1103,7 +1088,6 @@ def add_item(stdscr, inventory):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def select_field_to_edit(stdscr, item):
-    # Build options list dynamically to include custom fields
     options = [
         "1. Name",
         "2. Quantity",
@@ -1115,10 +1099,16 @@ def select_field_to_edit(stdscr, item):
         "8. Sale Price (hidden)",
         "9. All fields",
     ]
-    # Add individual custom field options numbered 10, 11, ...
     for i, field in enumerate(CUSTOM_FIELDS):
         options.append(f"{10 + i}. {field['label']} (custom)")
+    options.append("L. Low stock threshold")
+    options.append("R. Critical stock threshold")
     options.append("0. Cancel")
+
+    option_values = list(range(1, 10)) + list(range(10, 10 + len(CUSTOM_FIELDS))) + ['L', 'R', 'C', None]
+    
+    selected_idx = 0
+    typed_input = ""
 
     while True:
         stdscr.clear()
@@ -1149,7 +1139,6 @@ def select_field_to_edit(stdscr, item):
         except:
             y += 1
 
-        # Regular fields
         try: stdscr.addnstr(y, 4, f"Name:          {item.name[:w-20]}", w-5); y += 1
         except: y += 1
         try: stdscr.addnstr(y, 4, f"Quantity:      {item.quantity:,}", w-5); y += 1
@@ -1164,7 +1153,6 @@ def select_field_to_edit(stdscr, item):
         try: stdscr.addnstr(y, 4, f"Description:   {desc_line}", w-5); y += 1
         except: y += 1
 
-        # Hidden fields
         try:
             stdscr.addnstr(y, 4, f"Min Value:     ${item.min_value:,.2f} (hidden)", w-5); y += 1
             stdscr.addnstr(y, 4, f"Max Value:     ${item.max_value:,.2f} (hidden)", w-5); y += 1
@@ -1172,7 +1160,6 @@ def select_field_to_edit(stdscr, item):
         except:
             pass
 
-        # Custom field values with type-aware formatting
         if CUSTOM_FIELDS:
             for field in CUSTOM_FIELDS:
                 if y >= h - len(options) - 4:
@@ -1191,15 +1178,27 @@ def select_field_to_edit(stdscr, item):
                 except:
                     y += 1
 
-        y += 1  # blank line before options
+        low_thresh = item.custom.get('low_stock_threshold', 5)
+        crit_thresh = item.custom.get('critical_stock', 3)
+        try:
+            stdscr.addnstr(y, 4, f"Low threshold:  {low_thresh}", w-5); y += 1
+            stdscr.addnstr(y, 4, f"Critical:      {crit_thresh}", w-5); y += 1
+        except:
+            y += 2
 
-        # Options list
+        y += 1
+
         max_opt_y = h - 4
         visible_options = min(len(options), max(0, max_opt_y - y))
 
         for i in range(visible_options):
             try:
-                stdscr.addnstr(y + i, 2, options[i], w-3)
+                if i == selected_idx and not typed_input:
+                    stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+                    stdscr.addnstr(y + i, 2, options[i], w-3)
+                    stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+                else:
+                    stdscr.addnstr(y + i, 2, options[i], w-3)
             except:
                 pass
 
@@ -1211,34 +1210,55 @@ def select_field_to_edit(stdscr, item):
 
         prompt_y = min(y + visible_options + 1, h - 2)
         try:
-            stdscr.addstr(prompt_y, 0, "Enter Number → ")
+            if typed_input:
+                stdscr.addstr(prompt_y, 0, f"Enter → {typed_input}")
+            else:
+                stdscr.addstr(prompt_y, 0, "↑↓:select  Enter:confirm  type:number or L/C/R")
         except:
             pass
 
         stdscr.refresh()
+        key = stdscr.getch()
 
-        try:
-            curses.echo()
-            choice_str = stdscr.getstr(prompt_y, 20, 5).decode('utf-8').strip().upper()
-            curses.noecho()
-        except:
-            choice_str = ""
-
-        if choice_str in ('0', ''):
+        if key == curses.KEY_UP:
+            if selected_idx > 0:
+                selected_idx -= 1
+            typed_input = ""
+        elif key == curses.KEY_DOWN:
+            if selected_idx < len(options) - 1:
+                selected_idx += 1
+            typed_input = ""
+        elif key == curses.KEY_ENTER or key in (10, 13):
+            if not typed_input:
+                return option_values[selected_idx]
+        elif key == 27:
             return None
+        elif key in (curses.KEY_BACKSPACE, 127):
+            if typed_input:
+                typed_input = typed_input[:-1]
+        elif 48 <= key <= 57:
+            typed_input += chr(key)
+        elif key in (ord('L'), ord('l'), ord('C'), ord('c'), ord('R'), ord('r')):
+            typed_input = chr(key).upper()
 
-        if choice_str == 'C':
-            return 'C'   # special code for custom fields only
-
-        try:
-            ch = int(choice_str)
-            if 1 <= ch <= 9:
-                return ch
-            # Custom field individual edit: 10, 11, 12, ...
-            if 10 <= ch < 10 + len(CUSTOM_FIELDS):
-                return ch
-        except ValueError:
-            continue
+        if typed_input:
+            choice_str = typed_input.upper()
+            if choice_str in ('0', ''):
+                return None
+            if choice_str == 'C':
+                return 'C'
+            if choice_str == 'L':
+                return 'L'
+            if choice_str == 'R':
+                return 'R'
+            try:
+                ch = int(choice_str)
+                if 1 <= ch <= 9:
+                    return ch
+                if 10 <= ch < 10 + len(CUSTOM_FIELDS):
+                    return ch
+            except ValueError:
+                pass
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Hardened edit_item
@@ -1307,6 +1327,64 @@ def edit_item(stdscr, inventory, orig_idx):
 
         try:
             stdscr.addstr(5, 0, "Custom field updated. Press any key...")
+            stdscr.refresh()
+            stdscr.getch()
+        except:
+            pass
+        return
+
+    if choice == 'L':
+        new_custom = item.custom.copy()
+        stdscr.clear()
+        try:
+            stdscr.addstr(0, 0, "Edit Low Stock Threshold")
+        except:
+            pass
+        curr = new_custom.get('low_stock_threshold', 5)
+        try:
+            val = get_input(stdscr, f"Low stock threshold [{curr}]: ", 2, 0, 5, str(curr))
+            if val.strip():
+                new_custom['low_stock_threshold'] = int(val)
+        except:
+            pass
+        inventory[orig_idx] = Item(
+            name=item.name, quantity=item.quantity, cost=item.cost,
+            min_value=item.min_value, max_value=item.max_value, sale=item.sale,
+            location=item.location, description=item.description,
+            **new_custom
+        )
+        safe_save_inventory(inventory)
+        try:
+            stdscr.addstr(4, 0, "Threshold updated. Press any key...")
+            stdscr.refresh()
+            stdscr.getch()
+        except:
+            pass
+        return
+
+    if choice == 'R':
+        new_custom = item.custom.copy()
+        stdscr.clear()
+        try:
+            stdscr.addstr(0, 0, "Edit Critical Stock Threshold")
+        except:
+            pass
+        curr = new_custom.get('critical_stock', 3)
+        try:
+            val = get_input(stdscr, f"Critical stock threshold [{curr}]: ", 2, 0, 5, str(curr))
+            if val.strip():
+                new_custom['critical_stock'] = int(val)
+        except:
+            pass
+        inventory[orig_idx] = Item(
+            name=item.name, quantity=item.quantity, cost=item.cost,
+            min_value=item.min_value, max_value=item.max_value, sale=item.sale,
+            location=item.location, description=item.description,
+            **new_custom
+        )
+        safe_save_inventory(inventory)
+        try:
+            stdscr.addstr(4, 0, "Threshold updated. Press any key...")
             stdscr.refresh()
             stdscr.getch()
         except:
@@ -1611,6 +1689,11 @@ def view_details(stdscr, inventory, orig_idx):
                 disp = f"{value:,}"
             stdscr.addstr(y, 0, f"{field['label']:13} {disp}"); y += 1
 
+        low_thresh = item.custom.get('low_stock_threshold', 5)
+        crit_thresh = item.custom.get('critical_stock', 3)
+        stdscr.addstr(y, 0, f"Low threshold:{low_thresh}"); y += 1
+        stdscr.addstr(y, 0, f"Critical:    {crit_thresh}"); y += 1
+
         stdscr.addstr(y, 0, f"Min Value:    ${item.min_value:,.2f}"); y += 1
         stdscr.addstr(y, 0, f"Max Value:    ${item.max_value:,.2f}"); y += 1
         stdscr.addstr(y, 0, f"Sale:         ${item.sale:,.2f}"); y += 1
@@ -1745,14 +1828,14 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
             elif item.stock_status == "low":    color_pair = 2
 
         if color_pair: stdscr.attron(curses.color_pair(color_pair))
-        if idx == selected_row_idx: stdscr.attron(curses.A_REVERSE | curses.color_pair(4))
+        if idx == selected_row_idx: stdscr.attron(curses.A_REVERSE | curses.color_pair(1))
 
         try:
             stdscr.addnstr(y, 0, line, w-1)
         except curses.error:
             pass
 
-        if idx == selected_row_idx: stdscr.attroff(curses.A_REVERSE | curses.color_pair(4))
+        if idx == selected_row_idx: stdscr.attroff(curses.A_REVERSE | curses.color_pair(1))
         if color_pair: stdscr.attroff(curses.color_pair(color_pair))
 
     total_items = len(filtered)

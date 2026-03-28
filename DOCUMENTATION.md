@@ -53,9 +53,6 @@ CONFIG_FILE         → "inventory_config.json"
 AVAILABLE_COLUMNS   → Dict of all available columns with label, width, align
 COLUMNS            → List of currently active columns with key, width, align
 
-LOW_STOCK_THRESHOLD = 5   → Items with qty <= 5 show yellow
-CRITICAL_STOCK      = 3   → Items with qty <= 3 show red
-
 CUSTOM_FIELDS = []  → Global list of user-defined custom fields (max 5)
 PO_ENABLED     = True → Whether PO numbers are enabled for sales
 PROGRAM_NAME   = "TUI Inventory" → Customizable program name
@@ -88,7 +85,7 @@ Each inventory item is represented by an `Item` instance with 8 built-in fields 
 |--------------------|------------------------------------------------|----------------------|
 | `total_sale_value` | `quantity * sale`                               | `float`              |
 | `margin_percent`   | `(sale - cost) / sale * 100` if sale > cost > 0| `float` or `None`    |
-| `stock_status`     | Based on quantity vs thresholds                 | `"critical"`, `"low"`, or `"ok"` |
+| `stock_status`     | Based on quantity vs per-item thresholds (defaults: low<=5, critical<=3) | `"critical"`, `"low"`, or `"ok"` |
 
 ### Serialization Methods
 
@@ -155,12 +152,12 @@ Each inventory item is represented by an `Item` instance with 8 built-in fields 
 - Subtitle (s): Customize the subtitle shown below the title
 
 **Display Tab Options:**
-- Stock alerts (1): Toggle yellow/red coloring for low/critical stock items
-- Low stock threshold (2): Set quantity threshold for yellow warning
-- Critical stock (3): Set quantity threshold for red critical warning
-- PO Number (4): Toggle PO number tracking on/off for sales
-- Monetization (5): Toggle price input when recording sales
-- Column settings (6): Open column configuration menu
+- Show stock alerts (1): Toggle yellow/red coloring for low/critical stock items
+- PO Number (2): Toggle PO number tracking on/off for sales
+- Monetization (3): Toggle price input when recording sales
+- Column settings (4): Open column configuration menu
+
+**Note:** Stock alert thresholds are now per-item settings. Each item can have its own low stock threshold and critical stock level, configurable in the item detail/edit screen (press Enter on an item, then e to edit, then L for low stock threshold or R for critical stock threshold). Defaults are 5 for low stock and 3 for critical.
 
 **Note:** When adding new toggle options to Display Settings, ensure the On/Off values align with existing options (e.g., `"  {po_status}"` for PO Number). Use consistent spacing to maintain visual alignment.
 
@@ -219,6 +216,8 @@ Each inventory item is represented by an `Item` instance with 8 built-in fields 
 7. Max Value (hidden field)
 8. Sale Price (hidden field)
 9. All fields (edits everything including custom fields)
+L. Low stock threshold (per-item)
+R. Critical stock threshold (per-item)
 C. Custom fields only
 0. Cancel
 
