@@ -45,11 +45,11 @@ AVAILABLE_COLUMNS = {
 }
 
 COLUMNS = [
-    {'key': 'name', 'width': 24},
-    {'key': 'quantity', 'width': 6},
-    {'key': 'cost', 'width': 12},
-    {'key': 'location', 'width': 10},
-    {'key': 'description', 'width': 20},
+    {'key': 'name', 'width': 24, 'align': 'left'},
+    {'key': 'quantity', 'width': 6, 'align': 'right'},
+    {'key': 'cost', 'width': 12, 'align': 'center'},
+    {'key': 'location', 'width': 10, 'align': 'left'},
+    {'key': 'description', 'width': 20, 'align': 'left'},
 ]
 
 LOW_STOCK_THRESHOLD = 5
@@ -536,18 +536,22 @@ def column_config_menu(stdscr):
         for key in AVAILABLE_COLUMNS.keys():
             is_active = any(c['key'] == key for c in COLUMNS)
             width = None
+            align = None
             for c in COLUMNS:
                 if c['key'] == key:
                     width = c['width']
+                    align = c.get('align', 'left')
                     break
             if width is None:
                 width = AVAILABLE_COLUMNS[key]['width']
-            all_columns.append({'key': key, 'width': width, 'active': is_active})
+            if align is None:
+                align = AVAILABLE_COLUMNS[key]['align']
+            all_columns.append({'key': key, 'width': width, 'align': align, 'active': is_active})
         
         all_columns.sort(key=lambda c: AVAILABLE_COLUMNS[c['key']]['label'])
         
         try:
-            stdscr.addstr(2, 2, "Columns (Up/Down: navigate, Enter: toggle, +/-: width):")
+            stdscr.addstr(2, 2, "Columns (j/k: scroll, Enter: toggle, +/-: width, a: align L/C/R):")
         except curses.error:
             pass
         
@@ -556,6 +560,7 @@ def column_config_menu(stdscr):
             key = col['key']
             label = AVAILABLE_COLUMNS[key]['label']
             width = col['width']
+            align = col['align']
             marker = '[x]' if col['active'] else '[ ]'
             if i == selected_idx:
                 prefix = '>'
@@ -563,7 +568,7 @@ def column_config_menu(stdscr):
                 prefix = ' '
             if col['active']:
                 try:
-                    stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12} w:{width}")
+                    stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12} w:{width} a:{align[0]}")
                 except curses.error:
                     pass
             else:
@@ -594,7 +599,8 @@ def column_config_menu(stdscr):
             key = col['key']
             label = AVAILABLE_COLUMNS[key]['label']
             width = col['width']
-            col_positions.append((key, x, width))
+            align = col.get('align', 'left')
+            col_positions.append((key, x, width, align))
             try:
                 stdscr.addstr(header_y, x, label[:width].ljust(width))
             except curses.error:
@@ -602,7 +608,7 @@ def column_config_menu(stdscr):
             x += width + 1
         
         separator_y = header_y + 1
-        for key, x, width in col_positions:
+        for key, x, width, align in col_positions:
             try:
                 stdscr.addstr(separator_y, x, '-' * width)
             except curses.error:
@@ -612,9 +618,8 @@ def column_config_menu(stdscr):
             row_y = header_y + 2 + row_idx
             if row_y >= h - 3:
                 break
-            for key, x, width in col_positions:
+            for key, x, width, align in col_positions:
                 val = str(row.get(key, ''))[:width]
-                align = AVAILABLE_COLUMNS[key]['align']
                 if align == 'right':
                     formatted = val.rjust(width)
                 elif align == 'center':
@@ -627,7 +632,7 @@ def column_config_menu(stdscr):
                     pass
         
         try:
-            stdscr.addstr(h-3, 2, "Enter/j/k: toggle  +/-: width  d: default  q: back")
+            stdscr.addstr(h-3, 2, "Enter/j/k: toggle  +/-: width  a: align  d: default  q: back")
             stdscr.addstr(h-2, 2, "(max 5 columns, width 3-30)")
         except curses.error:
             pass
@@ -639,11 +644,11 @@ def column_config_menu(stdscr):
             break
         elif key == ord('d'):
             COLUMNS[:] = [
-                {'key': 'name', 'width': 24},
-                {'key': 'quantity', 'width': 6},
-                {'key': 'cost', 'width': 12},
-                {'key': 'location', 'width': 10},
-                {'key': 'description', 'width': 20},
+                {'key': 'name', 'width': 24, 'align': 'left'},
+                {'key': 'quantity', 'width': 6, 'align': 'right'},
+                {'key': 'cost', 'width': 12, 'align': 'center'},
+                {'key': 'location', 'width': 10, 'align': 'left'},
+                {'key': 'description', 'width': 20, 'align': 'left'},
             ]
         elif key in (curses.KEY_UP, ord('k')):
             selected_idx = max(0, selected_idx - 1)
@@ -655,7 +660,7 @@ def column_config_menu(stdscr):
                 COLUMNS[:] = [c for c in COLUMNS if c['key'] != col['key']]
             else:
                 if len(COLUMNS) < 5:
-                    COLUMNS.append({'key': col['key'], 'width': col['width']})
+                    COLUMNS.append({'key': col['key'], 'width': col['width'], 'align': col['align']})
         elif key in (ord('+'), ord('=')):
             col = all_columns[selected_idx]
             if col['active']:
@@ -669,6 +674,19 @@ def column_config_menu(stdscr):
                 for c in COLUMNS:
                     if c['key'] == col['key']:
                         c['width'] = max(3, c['width'] - 1)
+                        break
+        elif key == ord('a'):
+            col = all_columns[selected_idx]
+            if col['active']:
+                for c in COLUMNS:
+                    if c['key'] == col['key']:
+                        current_align = c.get('align', 'left')
+                        if current_align == 'left':
+                            c['align'] = 'center'
+                        elif current_align == 'center':
+                            c['align'] = 'right'
+                        else:
+                            c['align'] = 'left'
                         break
     
     save_config()
@@ -1598,7 +1616,7 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     for col in COLUMNS:
         label = AVAILABLE_COLUMNS[col['key']]['label']
         width = col['width']
-        align = AVAILABLE_COLUMNS[col['key']]['align']
+        align = col.get('align', AVAILABLE_COLUMNS[col['key']]['align'])
         if align == 'right':
             header_parts.append(label.rjust(width))
         elif align == 'center':
@@ -1609,7 +1627,7 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     stdscr.attron(curses.color_pair(1))
     stdscr.addstr(3, 0, headers[:w])
     stdscr.attroff(curses.color_pair(1))
-
+    
     for idx, item in enumerate(filtered):
         y = idx + 4
         if y >= h - 3: break
@@ -1618,7 +1636,7 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
         for col in COLUMNS:
             key = col['key']
             width = col['width']
-            align = AVAILABLE_COLUMNS[key]['align']
+            align = col.get('align', AVAILABLE_COLUMNS[key]['align'])
             value = getattr(item, key, '')
             if value is None:
                 value = ''
