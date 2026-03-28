@@ -55,6 +55,7 @@ COLUMNS = [
 LOW_STOCK_THRESHOLD = 5
 CRITICAL_STOCK      = 3
 PO_ENABLED = True
+MONETIZATION_ENABLED = True
 
 # Global custom fields
 CUSTOM_FIELDS = []  # [{'name':str, 'label':str, 'type':'text'|'number'|'money'}, ...]
@@ -89,7 +90,7 @@ THEME_COLOR = curses.COLOR_CYAN
 # ──────────────────────────────────────────────────────────────────────────────
 
 def load_config():
-    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, COLUMNS
+    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLUMNS
     if CONFIG_FILE.exists():
         try:
             with CONFIG_FILE.open('r', encoding='utf-8') as f:
@@ -100,6 +101,7 @@ def load_config():
                 PROGRAM_NAME = data.get('program_name', 'TUI Inventory')
                 SUBTITLE = data.get('subtitle', 'Track your inventory with ease')
                 PO_ENABLED = data.get('po_enabled', True)
+                MONETIZATION_ENABLED = data.get('monetization_enabled', True)
                 saved_cols = data.get('columns', None)
                 if saved_cols:
                     COLUMNS = saved_cols
@@ -111,11 +113,11 @@ def load_config():
         THEME_COLOR = curses.COLOR_CYAN
 
 def save_config(include_theme=True):
-    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, COLUMNS
+    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLUMNS
     with CONFIG_FILE.open('w', encoding='utf-8') as f:
         color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
         if include_theme:
-            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'columns': COLUMNS}, f, indent=2)
+            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'columns': COLUMNS}, f, indent=2)
         else:
             json.dump({'custom_fields': CUSTOM_FIELDS}, f, indent=2)
 
@@ -270,7 +272,7 @@ def record_sale(inventory, orig_idx, qty_sold, price_each, po_number=None):
     return True
 
 def record_sale_ui(stdscr, inventory, orig_idx):
-    global PO_ENABLED
+    global PO_ENABLED, MONETIZATION_ENABLED
     load_config()
     if not (0 <= orig_idx < len(inventory)):
         return False
@@ -279,10 +281,13 @@ def record_sale_ui(stdscr, inventory, orig_idx):
     stdscr.clear()
     stdscr.addstr(0, 0, f"Record Sale: {item.name}")
     stdscr.addstr(2, 0, f"Current stock: {item.quantity:,}")
-    if item.sale > 0:
+    if item.sale > 0 and MONETIZATION_ENABLED:
         stdscr.addstr(3, 0, f"Suggested price: ${item.sale:,.2f}")
 
-    qty_str = get_input(stdscr, "How many sold? ", 5, 0, 10, "1")
+    if MONETIZATION_ENABLED:
+        qty_str = get_input(stdscr, "How many sold? ", 5, 0, 10, "1")
+    else:
+        qty_str = get_input(stdscr, "Remove how many units? ", 5, 0, 10, "1")
     try:
         qty_sold = int(qty_str or "1")
         if qty_sold <= 0 or qty_sold > item.quantity:
@@ -296,20 +301,23 @@ def record_sale_ui(stdscr, inventory, orig_idx):
         stdscr.getch()
         return False
 
-    default_price = f"{item.sale:.2f}" if item.sale > 0 else "0.00"
-    price_str = get_input(stdscr, "Price each ($): ", 6, 0, 12, "")
-    try:
-        price_each = float(price_str or "0.00")
-        if price_each <= 0:
-            raise ValueError
-    except ValueError:
-        stdscr.addstr(8, 0, "Price must be > 0")
-        stdscr.addstr(10, 0, "Press any key...")
-        stdscr.getch()
-        return False
+    if MONETIZATION_ENABLED:
+        default_price = f"{item.sale:.2f}" if item.sale > 0 else "0.00"
+        price_str = get_input(stdscr, "Price each ($): ", 6, 0, 12, "")
+        try:
+            price_each = float(price_str or "0.00")
+            if price_each <= 0:
+                raise ValueError
+        except ValueError:
+            stdscr.addstr(8, 0, "Price must be > 0")
+            stdscr.addstr(10, 0, "Press any key...")
+            stdscr.getch()
+            return False
+    else:
+        price_each = 0.0
 
     po_number = ""
-    if PO_ENABLED:
+    if PO_ENABLED and MONETIZATION_ENABLED:
         while True:
             stdscr.addstr(10, 0, " " * (curses.COLS - 1))
             stdscr.addstr(9, 0, " " * (curses.COLS - 1))
@@ -332,11 +340,21 @@ def record_sale_ui(stdscr, inventory, orig_idx):
                 return False
             else:
                 break
-    else:
+    elif MONETIZATION_ENABLED:
         total = qty_sold * price_each
         po_display = "PO: N/A (disabled)"
         confirm = f"Sell {qty_sold:,} × {item.name} @ ${price_each:,.2f} = ${total:,.2f} ? (y/n)"
         stdscr.addstr(7, 0, po_display)
+        stdscr.addstr(9, 0, confirm[:curses.COLS-1])
+        stdscr.refresh()
+        ch = stdscr.getch()
+        if ch not in (ord('y'), ord('Y'), ord(' ')):
+            stdscr.addstr(11, 0, "Cancelled. Press any key...")
+            stdscr.getch()
+            return False
+    else:
+        confirm = f"Remove {qty_sold:,} × {item.name} from inventory ? (y/n)"
+        stdscr.addstr(7, 0, "Monetization: disabled")
         stdscr.addstr(9, 0, confirm[:curses.COLS-1])
         stdscr.refresh()
         ch = stdscr.getch()
@@ -564,6 +582,7 @@ def column_config_menu(stdscr):
         
         try:
             stdscr.addstr(2, 2, "Columns (Arrows: scroll, Enter: toggle, +/-: width, a: align L/C/R):")
+            stdscr.addstr(3, 0, "─" * min(w, 80))
         except curses.error:
             pass
         
@@ -580,12 +599,22 @@ def column_config_menu(stdscr):
                 prefix = ' '
             if col['active']:
                 try:
-                    stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12} w:{width} a:{align[0]}")
+                    if i == selected_idx:
+                        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12}  w:{width}  a:{align[0]}")
+                        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+                    else:
+                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12}  w:{width}  a:{align[0]}")
                 except curses.error:
                     pass
             else:
                 try:
-                    stdscr.addstr(y + i, 2, f"{prefix} {marker} {label}")
+                    if i == selected_idx:
+                        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label}")
+                        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+                    else:
+                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label}")
                 except curses.error:
                     pass
         
@@ -598,7 +627,7 @@ def column_config_menu(stdscr):
         except curses.error:
             pass
         
-        header_y = preview_y + 1
+        header_y = preview_y + 3
         sample_data = [
             {'name': 'Widget A', 'quantity': '25', 'cost': '$9.99', 'location': 'A1', 'description': 'Blue widget', 'min_value': '50.00', 'max_value': '100.00', 'sale': '$19.99'},
             {'name': 'Gadget B', 'quantity': '3', 'cost': '$24.50', 'location': 'B2', 'description': 'Red gadget', 'min_value': '75.00', 'max_value': '150.00', 'sale': '$49.00'},
@@ -616,8 +645,25 @@ def column_config_menu(stdscr):
             width = col['width']
             align = col.get('align', 'left')
             col_positions.append((key, x, width, align))
+            x += width + 1
+        
+        x = 2
+        for col in COLUMNS:
+            key = col['key']
+            if key.startswith('custom_'):
+                label = col.get('label', key)
+            else:
+                label = AVAILABLE_COLUMNS[key]['label']
+            width = col['width']
+            align = col.get('align', 'left')
             try:
-                stdscr.addstr(header_y, x, label[:width].ljust(width))
+                if align == 'right':
+                    header_text = label[:width].rjust(width)
+                elif align == 'center':
+                    header_text = label[:width].center(width)
+                else:
+                    header_text = label[:width].ljust(width)
+                stdscr.addstr(header_y, x, header_text)
             except curses.error:
                 pass
             x += width + 1
@@ -712,7 +758,7 @@ def column_config_menu(stdscr):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def config_menu(stdscr, inventory=None):
-    global CUSTOM_FIELDS, LOW_STOCK_THRESHOLD, CRITICAL_STOCK, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED
+    global CUSTOM_FIELDS, LOW_STOCK_THRESHOLD, CRITICAL_STOCK, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED
 
     load_config()
     stdscr.keypad(1)
@@ -824,7 +870,7 @@ def config_menu(stdscr, inventory=None):
                 stdscr.addstr(y, 2, "Subtitle (max 40 chars):")
                 stdscr.addstr(y+1, 2, f"  {SUBTITLE}")
                 y += 3
-                stdscr.addstr(y, 2, "n: edit name  s: edit subtitle")
+                stdscr.addstr(y, 2, "n: edit name  s: edit subtitle  r: reset defaults")
             except curses.error:
                 pass
 
@@ -836,8 +882,10 @@ def config_menu(stdscr, inventory=None):
                 stdscr.addstr(y+3, 2, f"2. Critical stock:       {CRITICAL_STOCK}")
                 po_status = "On" if PO_ENABLED else "Off"
                 stdscr.addstr(y+4, 2, f"3. PO Number:            {po_status}")
-                stdscr.addstr(y+5, 2, "4. Column settings")
-                stdscr.addstr(y+7, 2, "(press 1-4 to edit)")
+                mon_status = "On" if MONETIZATION_ENABLED else "Off"
+                stdscr.addstr(y+5, 2, f"4. Monetization:         {mon_status}")
+                stdscr.addstr(y+6, 2, "5. Column settings")
+                stdscr.addstr(y+8, 2, "(press 1-5 to edit)")
             except curses.error:
                 pass
 
@@ -872,7 +920,7 @@ def config_menu(stdscr, inventory=None):
                 stdscr.addstr(y+12, 2, "Enter new program name: ".ljust(w-3))
                 stdscr.refresh()
                 curses.echo()
-                new_name = stdscr.getstr(y+12, 24, 40).decode('utf-8').strip()
+                new_name = stdscr.getstr(y+12, 25, 40).decode('utf-8').strip()
                 curses.noecho()
                 if new_name:
                     PROGRAM_NAME = new_name
@@ -884,13 +932,17 @@ def config_menu(stdscr, inventory=None):
                 stdscr.addstr(y+13, 2, "Enter new subtitle: ".ljust(w-3))
                 stdscr.refresh()
                 curses.echo()
-                new_sub = stdscr.getstr(y+13, 21, 40).decode('utf-8').strip()
+                new_sub = stdscr.getstr(y+13, 22, 40).decode('utf-8').strip()
                 curses.noecho()
                 if new_sub:
                     SUBTITLE = new_sub
                     save_config()
             except:
                 curses.noecho()
+        elif current_tab == 1 and key == ord('r'):
+            PROGRAM_NAME = "TUI Inventory"
+            SUBTITLE = "Track your inventory with ease"
+            save_config()
         elif current_tab == 2 and key == ord('1'):
             try:
                 stdscr.addstr(y+11, 2, "New low stock threshold: ")
@@ -917,6 +969,9 @@ def config_menu(stdscr, inventory=None):
             PO_ENABLED = not PO_ENABLED
             save_config()
         elif current_tab == 2 and key == ord('4'):
+            MONETIZATION_ENABLED = not MONETIZATION_ENABLED
+            save_config()
+        elif current_tab == 2 and key == ord('5'):
             column_config_menu(stdscr)
         elif current_tab == 0 and key == ord('a'):
                 if len(CUSTOM_FIELDS) >= 5:
@@ -1572,10 +1627,9 @@ def view_details(stdscr, inventory, orig_idx):
         y += 2
 
         h, w = stdscr.getmaxyx()
-        stdscr.addstr(y, 0, "·" * min(w, 80))
-        y += 1
+        stdscr.addstr(h-2, 0, "·" * min(w, 80))
 
-        stdscr.addstr(y, 0, "e = edit   d = delete   c = config fields   Enter = back")
+        stdscr.addstr(h-1, 0, "e = edit   d = delete   c = config fields   Enter = back")
         stdscr.refresh()
 
         key = stdscr.getch()
@@ -1708,7 +1762,7 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     stdscr.addstr(h-2, 0, "·" * min(w, 80))
 
     stats = f"Items:{total_items}"
-    controls = "q:quit a:add s:search r:sale h:history c:cfg ENTER:details"
+    controls = "q:quit a:add s:search r:sale h:history c:configure ENTER:details"
     footer = f"{stats} | {controls}"
     stdscr.addnstr(h-1, 0, footer, w-1)
 
