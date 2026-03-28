@@ -509,6 +509,8 @@ def column_config_menu(stdscr):
     for color_name, pair_id in THEME_COLOR_PAIRS.items():
         curses.init_pair(pair_id, THEME_COLORS[color_name], curses.COLOR_BLACK)
     
+    selected_idx = 0
+    
     while True:
         stdscr.clear()
         h, w = stdscr.getmaxyx()
@@ -530,37 +532,102 @@ def column_config_menu(stdscr):
         except curses.error:
             pass
         
+        all_columns = []
+        for key in AVAILABLE_COLUMNS.keys():
+            is_active = any(c['key'] == key for c in COLUMNS)
+            width = None
+            for c in COLUMNS:
+                if c['key'] == key:
+                    width = c['width']
+                    break
+            if width is None:
+                width = AVAILABLE_COLUMNS[key]['width']
+            all_columns.append({'key': key, 'width': width, 'active': is_active})
+        
+        all_columns.sort(key=lambda c: AVAILABLE_COLUMNS[c['key']]['label'])
+        
         try:
-            stdscr.addstr(2, 2, "Current columns (select to toggle):")
+            stdscr.addstr(2, 2, "Columns (Up/Down: navigate, Enter: toggle, +/-: width):")
         except curses.error:
             pass
         
         y = 4
-        for i, col in enumerate(COLUMNS):
+        for i, col in enumerate(all_columns):
             key = col['key']
             label = AVAILABLE_COLUMNS[key]['label']
             width = col['width']
-            try:
-                stdscr.addstr(y + i, 2, f"{i+1}. {label:<12} width: {width}")
-            except curses.error:
-                pass
+            marker = '[x]' if col['active'] else '[ ]'
+            if i == selected_idx:
+                prefix = '>'
+            else:
+                prefix = ' '
+            if col['active']:
+                try:
+                    stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12} w:{width}")
+                except curses.error:
+                    pass
+            else:
+                try:
+                    stdscr.addstr(y + i, 2, f"{prefix} {marker} {label}")
+                except curses.error:
+                    pass
+        
+        preview_y = y + len(all_columns) + 2
+        if preview_y > h - 10:
+            preview_y = h - 10
         
         try:
-            stdscr.addstr(y + 6, 2, "Available columns (toggle on/off):")
+            stdscr.addstr(preview_y, 2, "Sample Preview:")
         except curses.error:
             pass
         
-        y += 8
-        available_keys = [k for k in AVAILABLE_COLUMNS.keys() if k not in [c['key'] for c in COLUMNS]]
-        for i, key in enumerate(available_keys):
+        header_y = preview_y + 1
+        sample_data = [
+            {'name': 'Widget A', 'quantity': '25', 'cost': '$9.99', 'location': 'A1', 'description': 'Blue widget', 'min_value': '50.00', 'max_value': '100.00', 'sale': '$19.99'},
+            {'name': 'Gadget B', 'quantity': '3', 'cost': '$24.50', 'location': 'B2', 'description': 'Red gadget', 'min_value': '75.00', 'max_value': '150.00', 'sale': '$49.00'},
+            {'name': 'Thingamajig C', 'quantity': '150', 'cost': '$5.00', 'location': 'C3', 'description': 'Green thing', 'min_value': '25.00', 'max_value': '50.00', 'sale': '$12.00'},
+        ]
+        
+        col_positions = []
+        x = 2
+        for col in COLUMNS:
+            key = col['key']
             label = AVAILABLE_COLUMNS[key]['label']
+            width = col['width']
+            col_positions.append((key, x, width))
             try:
-                stdscr.addstr(y + i, 2, f"+ {label}")
+                stdscr.addstr(header_y, x, label[:width].ljust(width))
+            except curses.error:
+                pass
+            x += width + 1
+        
+        separator_y = header_y + 1
+        for key, x, width in col_positions:
+            try:
+                stdscr.addstr(separator_y, x, '-' * width)
             except curses.error:
                 pass
         
+        for row_idx, row in enumerate(sample_data):
+            row_y = header_y + 2 + row_idx
+            if row_y >= h - 3:
+                break
+            for key, x, width in col_positions:
+                val = str(row.get(key, ''))[:width]
+                align = AVAILABLE_COLUMNS[key]['align']
+                if align == 'right':
+                    formatted = val.rjust(width)
+                elif align == 'center':
+                    formatted = val.center(width)
+                else:
+                    formatted = val.ljust(width)
+                try:
+                    stdscr.addstr(row_y, x, formatted)
+                except curses.error:
+                    pass
+        
         try:
-            stdscr.addstr(h-3, 2, "1-5: edit width  a-e: toggle off  A-E: toggle on  d: default  q: back")
+            stdscr.addstr(h-3, 2, "Enter/j/k: toggle  +/-: width  d: default  q: back")
             stdscr.addstr(h-2, 2, "(max 5 columns, width 3-30)")
         except curses.error:
             pass
@@ -578,29 +645,31 @@ def column_config_menu(stdscr):
                 {'key': 'location', 'width': 10},
                 {'key': 'description', 'width': 20},
             ]
-        elif 49 <= key <= 53:
-            idx = key - 49
-            if idx < len(COLUMNS):
-                try:
-                    stdscr.addstr(h-1, 2, f"New width for {COLUMNS[idx]['key']}: ".ljust(w-3))
-                    stdscr.refresh()
-                    curses.echo()
-                    val = stdscr.getstr(h-1, 22, 3).decode('utf-8').strip()
-                    curses.noecho()
-                    if val.isdigit():
-                        w_new = max(3, min(30, int(val)))
-                        COLUMNS[idx]['width'] = w_new
-                except:
-                    curses.noecho()
-        elif key in [ord('a'), ord('b'), ord('c'), ord('d'), ord('e')]:
-            idx = key - ord('a')
-            if idx < len(COLUMNS):
-                removed = COLUMNS.pop(idx)
-        elif key in [ord('A'), ord('B'), ord('C'), ord('D'), ord('E')]:
-            idx = key - ord('A')
-            if idx < len(available_keys) and len(COLUMNS) < 5:
-                key_to_add = available_keys[idx]
-                COLUMNS.append({'key': key_to_add, 'width': AVAILABLE_COLUMNS[key_to_add]['width']})
+        elif key in (curses.KEY_UP, ord('k')):
+            selected_idx = max(0, selected_idx - 1)
+        elif key in (curses.KEY_DOWN, ord('j')):
+            selected_idx = min(len(all_columns) - 1, selected_idx + 1)
+        elif key in (curses.KEY_ENTER, 10, 13, ord(' ')):
+            col = all_columns[selected_idx]
+            if col['active']:
+                COLUMNS[:] = [c for c in COLUMNS if c['key'] != col['key']]
+            else:
+                if len(COLUMNS) < 5:
+                    COLUMNS.append({'key': col['key'], 'width': col['width']})
+        elif key in (ord('+'), ord('=')):
+            col = all_columns[selected_idx]
+            if col['active']:
+                for c in COLUMNS:
+                    if c['key'] == col['key']:
+                        c['width'] = min(30, c['width'] + 1)
+                        break
+        elif key == ord('-'):
+            col = all_columns[selected_idx]
+            if col['active']:
+                for c in COLUMNS:
+                    if c['key'] == col['key']:
+                        c['width'] = max(3, c['width'] - 1)
+                        break
     
     save_config()
 
