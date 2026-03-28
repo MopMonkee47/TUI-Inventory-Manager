@@ -2,11 +2,11 @@
 
 ## Overview
 
-**TUI Inventory** (`inventoryV036.py`) is a single-file, terminal-based inventory management system written in Python 3. It uses the `curses` library to render a full text user interface (TUI) in the terminal. It has **zero external dependencies** -- only Python standard library modules are used.
+**TUI Inventory** (`inventory.py`) is a single-file, terminal-based inventory management system written in Python 3. It uses the `curses` library to render a full text user interface (TUI) in the terminal. It has **zero external dependencies** -- only Python standard library modules are used.
 
 **Run it with:**
 ```bash
-python inventoryV036.py
+python inventory.py
 ```
 > Must be run in an interactive terminal (TTY). Will not work in piped/non-interactive environments.
 
@@ -15,7 +15,7 @@ python inventoryV036.py
 ## Tech Stack
 
 | Component     | Technology                                      |
-|---------------|-------------------------------------------------|
+|---------------|------------------------------------------------|
 | Language      | Python 3 (standard library only)                |
 | UI            | `curses` (terminal text user interface)         |
 | Data Storage  | CSV flat files (`csv.DictReader` / `DictWriter`)|
@@ -31,17 +31,17 @@ The entire application lives in a single Python file. At runtime, it creates and
 
 | File                        | Purpose                                                    |
 |-----------------------------|------------------------------------------------------------|
-| `inventoryV036.py`          | The application (1200 lines)                               |
+| `inventory.py`              | The application (~1900 lines)                             |
 | `inventory.db`              | Main inventory database (CSV format, auto-created)         |
 | `inventory.db.bak`          | Automatic backup of inventory (created before every save)  |
 | `inventory_sales.log`       | Append-only sales transaction log (CSV format)             |
-| `inventory_config.json`     | Custom field definitions (JSON format)                     |
+| `inventory_config.json`     | Custom fields, column config, theme, and settings          |
 
 ---
 
 ## Constants & Configuration
 
-Defined at the top of the file (lines 23-40):
+Defined at the top of the file:
 
 ```
 SCRIPT_DIR          → Directory containing the script (all data files stored here)
@@ -50,15 +50,16 @@ BACKUP_FILE         → "inventory.db.bak"
 SALES_LOG           → "inventory_sales.log"
 CONFIG_FILE         → "inventory_config.json"
 
-NAME_W      = 24    → Column width for item names in the list view
-QTY_W       = 6     → Column width for quantity
-PRICE_W     = 12    → Column width for price/cost
-LOCATION_W  = 10    → Column width for location
+AVAILABLE_COLUMNS   → Dict of all available columns with label, width, align
+COLUMNS            → List of currently active columns with key, width, align
 
 LOW_STOCK_THRESHOLD = 5   → Items with qty <= 5 show yellow
 CRITICAL_STOCK      = 3   → Items with qty <= 3 show red
 
 CUSTOM_FIELDS = []  → Global list of user-defined custom fields (max 5)
+PO_ENABLED     = True → Whether PO numbers are enabled for sales
+PROGRAM_NAME   = "TUI Inventory" → Customizable program name
+SUBTITLE       = "Track your inventory with ease" → Customizable subtitle
 ```
 
 ---
@@ -98,56 +99,95 @@ Each inventory item is represented by an `Item` instance with 8 built-in fields 
 
 ## Functions Reference
 
-### Configuration (lines 46-60)
+### Configuration
 
 | Function        | Description                                                        |
 |-----------------|--------------------------------------------------------------------|
-| `load_config()` | Reads `inventory_config.json`, populates global `CUSTOM_FIELDS` list (max 5 entries). Silently ignores errors. |
-| `save_config()` | Writes current `CUSTOM_FIELDS` to `inventory_config.json` with pretty-print indentation. |
+| `load_config()` | Reads `inventory_config.json`, populates global settings (CUSTOM_FIELDS, THEME_COLOR, COLUMNS, PO_ENABLED, PROGRAM_NAME, SUBTITLE). Silently ignores errors. |
+| `save_config()` | Writes current settings to `inventory_config.json` with pretty-print indentation. |
 
-### Persistence (lines 131-171)
+### Persistence
 
 | Function                        | Description                                                                                                    |
 |---------------------------------|----------------------------------------------------------------------------------------------------------------|
 | `get_all_fieldnames(inventory)` | Returns ordered list of all CSV column names: 8 base fields + sorted custom field keys found across all items. |
 | `load_inventory()`              | Reads `inventory.db` CSV file, returns list of `Item` objects. Skips malformed rows silently.                  |
 | `safe_save_inventory(inventory)`| Creates a `.bak` backup of existing DB, then writes all items to `inventory.db`. Handles empty inventory.      |
+| `load_config()`                 | Loads config from JSON file including custom fields, theme, columns, PO setting, program name, subtitle         |
+| `save_config()`                 | Saves config to JSON file                                                 |
 
 **Backup strategy:** Every time inventory is saved, the current `inventory.db` is copied to `inventory.db.bak` first (using `shutil.copy2` which preserves metadata). This provides one level of undo.
 
-### Sales (lines 177-262)
+### Sales
 
 | Function                                          | Description                                                                                                  |
 |---------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
 | `record_sale(inventory, orig_idx, qty_sold, price_each)` | Core sale logic: validates index & quantity, decrements stock, appends CSV row to sales log, saves inventory. Returns `bool`. |
-| `record_sale_ui(stdscr, inventory, orig_idx)`     | Interactive UI for recording a sale. Prompts for quantity and price, shows confirmation, calls `record_sale()`. |
+| `record_sale_ui(stdscr, inventory, orig_idx)`     | Interactive UI for recording a sale. Prompts for quantity and price, shows confirmation, calls `record_sale()`. Supports optional PO number (if enabled). |
 
-**Sales log format** (CSV columns): `timestamp`, `name`, `quantity_sold`, `price_each`, `total`, `remaining_stock`
+**Sales log format** (CSV columns): `timestamp`, `name`, `quantity_sold`, `price_each`, `total`, `remaining_stock`, `po_number`
 
 - Timestamps are ISO 8601 format with seconds precision.
 - The log is append-only (opened in `'a'` mode). Header is written only on first creation.
 - Confirmation requires pressing `y`, `Y`, or Space.
+- PO number is optional and can be enabled/disabled in Display settings.
 
-### Sales History (lines 268-341)
+### Sales History
 
 | Function                    | Description                                                                     |
 |-----------------------------|---------------------------------------------------------------------------------|
-| `view_sales_history(stdscr)`| Reads entire sales log, reverses it (newest first), displays in a scrollable view. Handles resize events. |
+| `view_sales_history(stdscr)`| Reads entire sales log, reverses it (newest first), displays in a scrollable view. Handles resize events. Includes dotted separator line before controls. |
 
-### Custom Fields Configuration (lines 347-455)
+### Settings / Configuration
 
 | Function             | Description                                                                                      |
 |----------------------|--------------------------------------------------------------------------------------------------|
-| `config_menu(stdscr)`| Interactive menu to manage custom fields. Supports: `a` to add a field, `d#` to delete by index, `q` to quit. |
+| `config_menu(stdscr, inventory=None)`| Tabbed settings menu with Custom Fields, Settings, and Display tabs. |
+
+**Settings Tabs:**
+1. **Custom Fields** - Add/delete custom fields (max 5)
+2. **Settings** - Theme color, program name, subtitle
+3. **Display** - Low stock threshold, critical stock, PO toggle, column configuration
+
+**Settings Tab Options:**
+- Theme color (1-7): Change title/header color
+- Program name (n): Customize the program name displayed in title
+- Subtitle (s): Customize the subtitle shown below the title
+
+**Display Tab Options:**
+- Low stock threshold (1): Set quantity threshold for yellow warning
+- Critical stock (2): Set quantity threshold for red critical warning
+- PO Number (3): Toggle PO number tracking on/off for sales
+- Column settings (4): Open column configuration menu
 
 **Adding a custom field** prompts for:
 1. **Label** -- Display name (e.g., "Color")
 2. **Key** -- Internal storage key (auto-generated from label, e.g., "color")
 3. **Type** -- One of: `text`, `number`, `money` (defaults to `text` if invalid)
 
-Custom fields are saved immediately to `inventory_config.json`.
+### Column Configuration
 
-### Input & Validation (lines 461-519)
+| Function                  | Description                                                                                      |
+|---------------------------|--------------------------------------------------------------------------------------------------|
+| `column_config_menu(stdscr)` | Interactive menu to configure which columns are shown in the main list view. |
+
+**Available columns:** Name, Qty, Cost, Location, Description, Min, Max, Sale (plus any custom fields)
+
+**Column controls:**
+- **Arrow keys** - Navigate through columns
+- **Enter** or **Space** - Toggle column on/off
+- **+/-** - Increase/decrease column width (3-30)
+- **a** - Cycle alignment (left → center → right)
+- **d** - Reset to defaults
+- **q** - Back to settings
+
+**Features:**
+- Columns are listed alphabetically (built-in + custom fields)
+- Live preview shows what the column layout looks like
+- Alignment settings are saved per-column
+- Max 5 active columns
+
+### Input & Validation
 
 | Function                            | Description                                                                                     |
 |-------------------------------------|-------------------------------------------------------------------------------------------------|
@@ -155,7 +195,7 @@ Custom fields are saved immediately to `inventory_config.json`.
 | `get_input(stdscr, prompt, y, x, max_len, default)` | General-purpose input helper. Displays prompt, shows default value, enables echo mode for input, returns stripped string. |
 | `add_item(stdscr, inventory)`       | Full interactive add-item form: prompts for name, quantity, cost, location, description. Validates, creates `Item`, saves. Leaving name blank cancels. |
 
-### Editing (lines 525-923)
+### Editing
 
 | Function                                        | Description                                                                                    |
 |-------------------------------------------------|------------------------------------------------------------------------------------------------|
@@ -178,19 +218,19 @@ C. Custom fields only
 
 The term "hidden" for fields 6-8 means they are not shown in the main list view -- they are only visible in the detail view and edit screens.
 
-### Delete & View (lines 925-995)
+### Delete & View
 
 | Function                                   | Description                                                                                  |
 |--------------------------------------------|----------------------------------------------------------------------------------------------|
 | `delete_item(stdscr, inventory, orig_idx)` | Confirmation prompt (`y/N`). Removes item from list, saves inventory. Returns `bool`.        |
-| `view_details(stdscr, inventory, orig_idx)`| Detail view loop. Shows all fields (including custom fields with type-aware formatting). Sub-actions: `e` edit, `d` delete, `c` config fields, any other key returns. |
+| `view_details(stdscr, inventory, orig_idx)`| Detail view loop. Shows all fields (including custom fields with type-aware formatting). Sub-actions: `e` edit, `d` delete, `c` config fields, any other key returns. Includes dotted separator line before controls. |
 
 **Custom field display formatting in detail view:**
 - `money` type: formatted as `$1,234.56`
 - `number` type: formatted with commas (e.g., `1,234`)
 - `text` type: displayed as-is
 
-### Search (lines 997-1001)
+### Search
 
 | Function             | Description                                                        |
 |----------------------|--------------------------------------------------------------------|
@@ -198,41 +238,50 @@ The term "hidden" for fields 6-8 means they are not shown in the main list view 
 
 Search filtering happens in `draw_menu()` -- it matches the search term (case-insensitive) against `name`, `description`, and `location` fields.
 
-### Main List View: `draw_menu()` (lines 1003-1075)
+### Main List View: `draw_menu()` (lines 1599+)
 
 This is the core rendering function that draws the main inventory list screen. It:
 
 1. **Filters** items by search term (matches against name, description, location -- case-insensitive)
 2. **Sorts** filtered items by the current sort key and direction
 3. **Maps** filtered items back to original inventory indices (needed for edit/delete operations)
-4. **Renders** the table with columns: Name, Qty, Cost, Location, Description
+4. **Renders** the table with configurable columns (from `COLUMNS` config)
 5. **Color-codes** rows by stock status:
    - Color pair 3 (red) = critical stock (qty <= 3)
    - Color pair 2 (yellow) = low stock (qty <= 5)
    - Color pair 4 (green) + reverse video = currently selected row
-6. **Shows footer** with item count, low-stock count, and keyboard shortcuts
+6. **Shows footer** with item count and keyboard shortcuts
+7. **Separator line** - Dotted line (`·`) separates controls from content
+
+**Column Configuration:**
+- Columns are defined in `COLUMNS` list with `key`, `width`, and `align`
+- Can include built-in fields and custom fields (`custom_fieldname`)
+- Custom field columns display values from `item.custom` dict
+- Each column has independent width (3-30) and alignment (left/center/right)
 
 **Returns:** `(filtered_list, original_indices_list)` -- used by the main loop to map selection to actual inventory positions.
 
-### Terminal Size Check (lines 1080-1098)
+### Terminal Size Check
 
 | Function              | Description                                                  |
 |-----------------------|--------------------------------------------------------------|
 | `check_size(stdscr)`  | Enforces minimum terminal size of 70x20. Displays resize message if too small. Returns `bool`. |
 
-Many sub-screens also have their own minimum size checks (e.g., config menu needs 50x12, edit needs 60x18).
+Many sub-screens also have their own minimum size checks (e.g., config menu needs 50x15, column config needs 50x15).
 
-### Main Loop: `main()` (lines 1104-1194)
+### Main Loop: `main()` (lines 1716+)
 
 The application entry point (wrapped by `curses.wrapper()`). Sets up:
 
 **Color pairs:**
 | Pair | Foreground | Usage                          |
 |------|------------|--------------------------------|
-| 1    | Cyan       | Headers, titles                |
+| 1    | Cyan (default) | Headers, titles            |
 | 2    | Yellow     | Low stock items (qty <= 5)     |
 | 3    | Red        | Critical stock items (qty <= 3)|
 | 4    | Green      | Selected row highlight         |
+
+**Theme colors:** User can customize the title/header color from several options.
 
 **State variables:**
 - `selected_row_idx` -- Currently highlighted row in the list
@@ -258,11 +307,16 @@ The application entry point (wrapped by `curses.wrapper()`). Sets up:
 | `l`            | Sort by location (toggle asc/desc)                  |
 | `r`            | Record a sale for selected item                     |
 | `h`            | View sales history                                  |
-| `c`            | Open custom fields configuration                    |
+| `c`            | Open settings menu                                  |
 | Enter          | View details of selected item                       |
 | Resize event   | Clears and redraws the screen                       |
 
-### Entry Point (lines 1196-1200)
+**UI Styling:**
+- Horizontal separator lines use Unicode box-drawing character (`─`)
+- Dotted separator lines (`·`) separate controls from content in footer areas
+- Settings menu uses tabs (Custom Fields, Settings, Display)
+
+### Entry Point
 
 ```python
 if __name__ == "__main__":
@@ -322,6 +376,17 @@ Sort:
   → draw_menu() sorts filtered list by key and direction
 ```
 
+### Column Configuration
+```
+User presses 'c' (settings) → Display tab → 4 (Column settings)
+  → column_config_menu() shows all available columns
+  → Arrow keys/j/k to navigate, Enter to toggle on/off
+  → +/- to adjust width, 'a' to cycle alignment
+  → Live preview shows column layout
+  → 'd' resets to defaults, 'q' saves and returns
+  → Config saved to inventory_config.json
+```
+
 ---
 
 ## Error Handling Approach
@@ -343,5 +408,6 @@ The application uses a defensive coding style throughout:
 3. **Linear search for original indices** -- `draw_menu()` uses `inventory.index(item)` which is O(n) per item, making it O(n^2) overall. Fine for small inventories but would be slow with thousands of items.
 4. **Single-level backup** -- Only the most recent backup is kept (`.bak` file is overwritten each save).
 5. **No concurrent access protection** -- No file locking; not safe if multiple instances run simultaneously.
-6. **The `Zone.Identifier` file** alongside the script is a Windows NTFS metadata artifact indicating the file was downloaded from the internet.
-7. **Version `V036`** in the filename suggests this is the 36th iteration of active development.
+6. **Max 5 custom fields** -- Limited to prevent UI crowding.
+7. **Max 5 active columns** -- Limited to prevent display issues on smaller terminals.
+8. **Column width limits** -- Width must be between 3 and 30 characters.

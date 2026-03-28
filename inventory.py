@@ -423,11 +423,6 @@ def view_sales_history(stdscr):
                     pass
 
                 try:
-                    stdscr.addstr(2, 0, "-" * min(w, 100))
-                except curses.error:
-                    pass
-
-                try:
                     stdscr.addstr(3, 0, "DATE       NAME                 QTY  PRICE     TOTAL    PO")
                     stdscr.addstr(4, 0, "---------- -------------------- --- -------- -------- ----------")
                     stdscr.addstr(4, 75, "more ->")
@@ -464,6 +459,7 @@ def view_sales_history(stdscr):
                 y += 1
 
             try:
+                stdscr.addstr(y+1, 0, "·" * min(w, 80))
                 if search_term:
                     stdscr.addstr(y+2, 0, "b:back (clear search)  ENTER:return to main")
                 else:
@@ -540,15 +536,31 @@ def column_config_menu(stdscr):
             for c in COLUMNS:
                 if c['key'] == key:
                     width = c['width']
-                    align = c.get('align', 'left')
+                    align = c.get('align')
                     break
             if width is None:
                 width = AVAILABLE_COLUMNS[key]['width']
             if align is None:
                 align = AVAILABLE_COLUMNS[key]['align']
-            all_columns.append({'key': key, 'width': width, 'align': align, 'active': is_active})
+            all_columns.append({'key': key, 'width': width, 'align': align, 'active': is_active, 'is_custom': False})
         
-        all_columns.sort(key=lambda c: AVAILABLE_COLUMNS[c['key']]['label'])
+        for field in CUSTOM_FIELDS:
+            key = 'custom_' + field['name']
+            is_active = any(c['key'] == key for c in COLUMNS)
+            width = None
+            align = None
+            for c in COLUMNS:
+                if c['key'] == key:
+                    width = c['width']
+                    align = c.get('align', 'left')
+                    break
+            if width is None:
+                width = 12
+            if align is None:
+                align = 'left'
+            all_columns.append({'key': key, 'width': width, 'align': align, 'active': is_active, 'is_custom': True, 'label': field['label'], 'type': field.get('type', 'text')})
+        
+        all_columns.sort(key=lambda c: c.get('label') or AVAILABLE_COLUMNS[c['key']]['label'])
         
         try:
             stdscr.addstr(2, 2, "Columns (Arrows: scroll, Enter: toggle, +/-: width, a: align L/C/R):")
@@ -558,7 +570,7 @@ def column_config_menu(stdscr):
         y = 4
         for i, col in enumerate(all_columns):
             key = col['key']
-            label = AVAILABLE_COLUMNS[key]['label']
+            label = col.get('label') or AVAILABLE_COLUMNS[key]['label']
             width = col['width']
             align = col['align']
             marker = '[x]' if col['active'] else '[ ]'
@@ -597,7 +609,10 @@ def column_config_menu(stdscr):
         x = 2
         for col in COLUMNS:
             key = col['key']
-            label = AVAILABLE_COLUMNS[key]['label']
+            if key.startswith('custom_'):
+                label = col.get('label', key)
+            else:
+                label = AVAILABLE_COLUMNS[key]['label']
             width = col['width']
             align = col.get('align', 'left')
             col_positions.append((key, x, width, align))
@@ -632,6 +647,7 @@ def column_config_menu(stdscr):
                     pass
         
         try:
+            stdscr.addstr(h-4, 0, "·" * min(w, 80))
             stdscr.addstr(h-3, 2, "Enter/Arrows: toggle  +/-: width  a: align  d: default  q: back")
             stdscr.addstr(h-2, 2, "(max 5 columns, width 3-30)")
         except curses.error:
@@ -826,6 +842,7 @@ def config_menu(stdscr, inventory=None):
                 pass
 
         try:
+            stdscr.addstr(h-2, 0, "·" * min(w, 80))
             stdscr.addstr(h-1, 0, f"←/→: tabs  Enter: Return".ljust(w-1))
         except curses.error:
             pass
@@ -1554,6 +1571,10 @@ def view_details(stdscr, inventory, orig_idx):
         stdscr.addstr(y, 0, f"Description:  {item.description}")
         y += 2
 
+        h, w = stdscr.getmaxyx()
+        stdscr.addstr(y, 0, "·" * min(w, 80))
+        y += 1
+
         stdscr.addstr(y, 0, "e = edit   d = delete   c = config fields   Enter = back")
         stdscr.refresh()
 
@@ -1610,13 +1631,17 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     dir_symbol = "↓" if direction > 0 else "↑"
     stdscr.addstr(1, 0, f"Search: {search_term or '(none)'}   Sort: {sort_key} {dir_symbol}   (s:search n:name t:qty l:loc)")
 
-    stdscr.addstr(2, 0, "-" * min(w, 100))
+    stdscr.addstr(2, 0, "─" * min(w, 100))
 
     header_parts = []
     for col in COLUMNS:
-        label = AVAILABLE_COLUMNS[col['key']]['label']
+        key = col['key']
+        if key.startswith('custom_'):
+            label = col.get('label', key)
+        else:
+            label = AVAILABLE_COLUMNS[key]['label']
         width = col['width']
-        align = col.get('align', AVAILABLE_COLUMNS[col['key']]['align'])
+        align = col.get('align', 'left')
         if align == 'right':
             header_parts.append(label.rjust(width))
         elif align == 'center':
@@ -1636,8 +1661,11 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
         for col in COLUMNS:
             key = col['key']
             width = col['width']
-            align = col.get('align', AVAILABLE_COLUMNS[key]['align'])
-            value = getattr(item, key, '')
+            align = col.get('align', 'left')
+            if key.startswith('custom_'):
+                value = item.custom.get(key[7:], '')
+            else:
+                value = getattr(item, key, '')
             if value is None:
                 value = ''
             
@@ -1676,6 +1704,8 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
         if color_pair: stdscr.attroff(curses.color_pair(color_pair))
 
     total_items = len(filtered)
+
+    stdscr.addstr(h-2, 0, "·" * min(w, 80))
 
     stats = f"Items:{total_items}"
     controls = "q:quit a:add s:search r:sale h:history c:cfg ENTER:details"
