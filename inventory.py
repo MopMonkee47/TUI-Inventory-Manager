@@ -558,11 +558,11 @@ def view_sales_history(stdscr):
                 y += 1
 
             try:
-                stdscr.addstr(y+1, 0, "·" * min(w, 80))
+                stdscr.addstr(h-2, 0, "·" * min(w, 80))
                 if search_term:
-                    stdscr.addstr(y+2, 0, "ESC/b:clear search  q: back")
+                    stdscr.addstr(h-1, 0, "ESC/b:clear search  q: back".ljust(w-1))
                 else:
-                    stdscr.addstr(y+2, 0, "q: back")
+                    stdscr.addstr(h-1, 0, "q: back".ljust(w-1))
             except curses.error:
                 pass
         except Exception as e:
@@ -1212,7 +1212,7 @@ def config_menu(stdscr, inventory=None):
 
         try:
             stdscr.addstr(h-2, 0, "·" * min(w, 80))
-            stdscr.addstr(h-1, 0, f"←/→: tabs  ↑↓: navigate  Enter: select".ljust(w-1))
+            stdscr.addstr(h-1, 0, f"←/→: tabs  ↑↓: navigate  Enter: select  q: back".ljust(w-1))
         except curses.error:
             pass
 
@@ -1564,12 +1564,12 @@ def select_field_to_edit(stdscr, item):
             except:
                 pass
 
-        prompt_y = min(y + visible_options + 1, h - 2)
         try:
+            stdscr.addstr(h-2, 0, "·" * min(w, 80))
             if typed_input:
-                stdscr.addstr(prompt_y, 0, f"Enter → {typed_input}")
+                stdscr.addstr(h-1, 0, f"Enter → {typed_input}".ljust(w-1))
             else:
-                stdscr.addstr(prompt_y, 0, "↑↓:select  Enter:confirm  type:number or L/C/R")
+                stdscr.addstr(h-1, 0, "↑↓:select  Enter:confirm  type:number or L/C/R  q:back".ljust(w-1))
         except:
             pass
 
@@ -1587,7 +1587,7 @@ def select_field_to_edit(stdscr, item):
         elif key == curses.KEY_ENTER or key in (10, 13):
             if not typed_input:
                 return option_values[selected_idx]
-        elif key == 27:
+        elif key == 27 or key == ord('q'):
             return None
         elif key in (curses.KEY_BACKSPACE, 127):
             if typed_input:
