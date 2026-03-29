@@ -52,6 +52,24 @@ COLUMNS = [
     {'key': 'description', 'width': 20, 'align': 'left'},
 ]
 
+HISTORY_COLUMNS = [
+    {'key': 'timestamp', 'width': 10, 'align': 'left'},
+    {'key': 'name', 'width': 20, 'align': 'left'},
+    {'key': 'quantity', 'width': 4, 'align': 'right'},
+    {'key': 'price', 'width': 8, 'align': 'right'},
+    {'key': 'total', 'width': 10, 'align': 'right'},
+    {'key': 'po', 'width': 12, 'align': 'left'},
+]
+
+AVAILABLE_HISTORY_COLUMNS = {
+    'timestamp': {'label': 'Date', 'width': 10, 'align': 'left'},
+    'name': {'label': 'Name', 'width': 20, 'align': 'left'},
+    'quantity': {'label': 'Qty', 'width': 4, 'align': 'right'},
+    'price': {'label': 'Price', 'width': 8, 'align': 'right'},
+    'total': {'label': 'Total', 'width': 10, 'align': 'right'},
+    'po': {'label': 'PO', 'width': 12, 'align': 'left'},
+}
+
 PO_ENABLED = True
 MONETIZATION_ENABLED = True
 COLOR_CRITICAL_ENABLED = True
@@ -89,7 +107,7 @@ THEME_COLOR = curses.COLOR_CYAN
 # ──────────────────────────────────────────────────────────────────────────────
 
 def load_config():
-    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, COLUMNS
+    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, COLUMNS, HISTORY_COLUMNS
     if CONFIG_FILE.exists():
         try:
             with CONFIG_FILE.open('r', encoding='utf-8') as f:
@@ -105,6 +123,9 @@ def load_config():
                 saved_cols = data.get('columns', None)
                 if saved_cols:
                     COLUMNS = saved_cols
+                saved_history_cols = data.get('history_columns', None)
+                if saved_history_cols:
+                    HISTORY_COLUMNS = saved_history_cols
         except Exception:
             CUSTOM_FIELDS = []
             THEME_COLOR = curses.COLOR_CYAN
@@ -113,11 +134,11 @@ def load_config():
         THEME_COLOR = curses.COLOR_CYAN
 
 def save_config(include_theme=True):
-    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, COLUMNS
+    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, COLUMNS, HISTORY_COLUMNS
     with CONFIG_FILE.open('w', encoding='utf-8') as f:
         color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
         if include_theme:
-            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'color_critical_enabled': COLOR_CRITICAL_ENABLED, 'columns': COLUMNS}, f, indent=2)
+            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'color_critical_enabled': COLOR_CRITICAL_ENABLED, 'columns': COLUMNS, 'history_columns': HISTORY_COLUMNS}, f, indent=2)
         else:
             json.dump({'custom_fields': CUSTOM_FIELDS}, f, indent=2)
 
@@ -385,6 +406,9 @@ def record_sale_ui(stdscr, inventory, orig_idx):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def view_sales_history(stdscr):
+    global HISTORY_COLUMNS, AVAILABLE_HISTORY_COLUMNS
+    load_config()
+    
     if not SALES_LOG.exists():
         stdscr.clear()
         try:
@@ -398,7 +422,7 @@ def view_sales_history(stdscr):
 
     search_term = ""
     sort_key = 'timestamp'
-    sort_directions = {'timestamp': -1, 'name': 1, 'quantity': 1, 'total': 1}
+    sort_directions = {'timestamp': -1, 'name': 1, 'quantity': 1, 'total': 1, 'price': 1, 'po': 1}
 
     while True:
         stdscr.clear()
@@ -436,6 +460,10 @@ def view_sales_history(stdscr):
                     rows.sort(key=lambda x: int(x.get('quantity_sold', 0)), reverse=rev)
                 elif sort_key == 'total':
                     rows.sort(key=lambda x: float(x.get('total', 0)), reverse=rev)
+                elif sort_key == 'price':
+                    rows.sort(key=lambda x: float(x.get('price_each', 0)), reverse=rev)
+                elif sort_key == 'po':
+                    rows.sort(key=lambda x: x.get('po_number', '').lower(), reverse=rev)
 
                 stdscr.attron(curses.color_pair(1))
                 stdscr.addstr(0, 0, "Sales History".center(min(w, 100)))
@@ -443,7 +471,7 @@ def view_sales_history(stdscr):
                 stdscr.addstr(1, 0, "")
 
                 dir_symbol = "↓" if direction < 0 else "↑"
-                status = f"Search: {search_term or '(none)'}   Sort: {sort_key} {dir_symbol}   (s:search n:name t:time q:qty $:total)"
+                status = f"Search: {search_term or '(none)'}   Sort: {sort_key} {dir_symbol}   (s:search #:sort ESC:clear)"
                 try:
                     stdscr.addstr(2, 0, status[:w-1])
                 except curses.error:
@@ -454,31 +482,70 @@ def view_sales_history(stdscr):
                 except curses.error:
                     pass
 
+                col_positions = []
+                x = 0
+                for idx, col in enumerate(HISTORY_COLUMNS):
+                    key = col['key']
+                    label = AVAILABLE_HISTORY_COLUMNS[key]['label']
+                    width = col['width']
+                    align = col.get('align', 'left')
+                    col_positions.append((key, x, width, align, label))
+                    x += width + 1
+
+                header_y = 6
                 try:
-                    stdscr.addstr(6, 0, "DATE       NAME                 QTY  PRICE     TOTAL    PO")
-                    stdscr.addstr(7, 0, "---------- -------------------- --- -------- -------- ----------")
-                    stdscr.addstr(7, 75, "more ->")
+                    stdscr.addstr(header_y, 0, "# ")
+                    x = 2
+                    for key, pos_x, width, align, label in col_positions:
+                        col_label = f"{label}({col_positions.index((key, pos_x, width, align, label)) + 1})"
+                        if align == 'right':
+                            header_text = col_label[:width].rjust(width)
+                        elif align == 'center':
+                            header_text = col_label[:width].center(width)
+                        else:
+                            header_text = col_label[:width].ljust(width)
+                        stdscr.addstr(header_y, x, header_text)
+                        x += width + 1
+                    stdscr.addstr(header_y, x, "more ->")
+                    header_y += 1
+                    stdscr.addstr(header_y, 0, "- " + "-" * min(w - 2, 80))
                 except curses.error:
                     pass
 
-                y = 8
+                y = header_y + 1
 
                 max_lines = h - y - 4
-                for row in rows[:max_lines]:
+                for idx, row in enumerate(rows[:max_lines]):
                     if y >= h - 3:
                         break
-                    ts = row.get('timestamp', '?')[:10]
-                    qty = int(row.get('quantity_sold', '0'))
-                    price = float(row.get('price_each', '0'))
-                    total = float(row.get('total', '0'))
-                    po = row.get('po_number', '')
-                    
-                    name = row.get('name', '?')[:20]
-                    
-                    po_str = f"{po}" if po else "-"
-                    line = f"{ts:<10} {name:<20} {qty:>3}  ${price:>7,.2f}  ${total:>7,.2f}  {po_str:<10}"
+                    row_str = f"{idx+1:<2} "
+                    x = 2
+                    for key, pos_x, width, align, label in col_positions:
+                        if key == 'timestamp':
+                            val = row.get('timestamp', '?')[:10]
+                        elif key == 'name':
+                            val = row.get('name', '?')
+                        elif key == 'quantity':
+                            val = int(row.get('quantity_sold', '0'))
+                        elif key == 'price':
+                            val = f"${float(row.get('price_each', '0')):,.2f}"
+                        elif key == 'total':
+                            val = f"${float(row.get('total', '0')):,.2f}"
+                        elif key == 'po':
+                            val = row.get('po_number', '-')
+                        else:
+                            val = str(row.get(key, ''))
+                        
+                        val = str(val)[:width]
+                        if align == 'right':
+                            formatted = val.rjust(width)
+                        elif align == 'center':
+                            formatted = val.center(width)
+                        else:
+                            formatted = val.ljust(width)
+                        row_str += formatted + " "
                     try:
-                        stdscr.addnstr(y, 0, line, w-1)
+                        stdscr.addnstr(y, 0, row_str, w-1)
                     except curses.error:
                         pass
                     y += 1
@@ -493,9 +560,9 @@ def view_sales_history(stdscr):
             try:
                 stdscr.addstr(y+1, 0, "·" * min(w, 80))
                 if search_term:
-                    stdscr.addstr(y+2, 0, "b:back (clear search)  ENTER:return to main")
+                    stdscr.addstr(y+2, 0, "ESC/b:clear search  q: back")
                 else:
-                    stdscr.addstr(y+2, 0, "ENTER:return to main")
+                    stdscr.addstr(y+2, 0, "q: back")
             except curses.error:
                 pass
         except Exception as e:
@@ -509,19 +576,35 @@ def view_sales_history(stdscr):
         
         if key == curses.KEY_RESIZE:
             continue
+        elif key == 27:
+            if search_term:
+                search_term = ""
+            else:
+                break
         elif key == ord('s'):
             search_term = search_mode(stdscr)
         elif key == ord('b') and search_term:
             search_term = ""
+        elif key == ord('q'):
+            break
         elif key in (10, curses.KEY_ENTER, ord('b')):
             break
-        elif key in (ord('n'), ord('t'), ord('q'), ord('$')):
-            new_key = {ord('n'): 'name', ord('t'): 'timestamp', ord('q'): 'quantity', ord('$'): 'total'}[key]
+        elif key in (ord('n'), ord('t'), ord('$')):
+            new_key = {ord('n'): 'name', ord('t'): 'timestamp', ord('$'): 'total'}[key]
             if new_key == sort_key:
                 sort_directions[new_key] *= -1
             else:
                 sort_key = new_key
                 sort_directions[new_key] = 1
+        elif ord('1') <= key <= ord('6'):
+            col_idx = key - ord('1')
+            if col_idx < len(HISTORY_COLUMNS):
+                new_key = HISTORY_COLUMNS[col_idx]['key']
+                if new_key == sort_key:
+                    sort_directions[new_key] *= -1
+                else:
+                    sort_key = new_key
+                    sort_directions[new_key] = 1
         elif not search_term:
             break
 
@@ -662,7 +745,7 @@ def column_config_menu(stdscr):
             x += width + 1
         
         x = 2
-        for col in COLUMNS:
+        for idx, col in enumerate(COLUMNS):
             key = col['key']
             if key.startswith('custom_'):
                 label = col.get('label', key)
@@ -670,13 +753,14 @@ def column_config_menu(stdscr):
                 label = AVAILABLE_COLUMNS[key]['label']
             width = col['width']
             align = col.get('align', 'left')
+            label_with_num = f"{label}({idx + 1})"
             try:
                 if align == 'right':
-                    header_text = label[:width].rjust(width)
+                    header_text = label_with_num[:width].rjust(width)
                 elif align == 'center':
-                    header_text = label[:width].center(width)
+                    header_text = label_with_num[:width].center(width)
                 else:
-                    header_text = label[:width].ljust(width)
+                    header_text = label_with_num[:width].ljust(width)
                 stdscr.addstr(header_y, x, header_text)
             except curses.error:
                 pass
@@ -755,6 +839,223 @@ def column_config_menu(stdscr):
             col = all_columns[selected_idx]
             if col['active']:
                 for c in COLUMNS:
+                    if c['key'] == col['key']:
+                        current_align = c.get('align', 'left')
+                        if current_align == 'left':
+                            c['align'] = 'center'
+                        elif current_align == 'center':
+                            c['align'] = 'right'
+                        else:
+                            c['align'] = 'left'
+                        break
+    
+    save_config()
+
+# ──────────────────────────────────────────────────────────────────────────────
+# History Column Configuration Menu
+# ──────────────────────────────────────────────────────────────────────────────
+
+def history_column_config_menu(stdscr):
+    global HISTORY_COLUMNS, AVAILABLE_HISTORY_COLUMNS
+    load_config()
+    stdscr.keypad(1)
+    
+    for color_name, pair_id in THEME_COLOR_PAIRS.items():
+        curses.init_pair(pair_id, THEME_COLORS[color_name], curses.COLOR_BLACK)
+    
+    selected_idx = 0
+    
+    while True:
+        stdscr.clear()
+        h, w = stdscr.getmaxyx()
+        
+        if h < 15 or w < 50:
+            try:
+                stdscr.addstr(h//2 - 2, 2, "Window too small")
+                stdscr.addstr(h//2, 2, f"Need ~50×15 – current: {w}×{h}")
+            except curses.error:
+                pass
+            stdscr.refresh()
+            stdscr.getch()
+            break
+        
+        try:
+            stdscr.attron(curses.color_pair(1))
+            stdscr.addstr(0, 0, "History Column Configuration".center(min(w, 100)))
+            stdscr.attroff(curses.color_pair(1))
+        except curses.error:
+            pass
+        
+        all_columns = []
+        for key in AVAILABLE_HISTORY_COLUMNS.keys():
+            is_active = any(c['key'] == key for c in HISTORY_COLUMNS)
+            width = None
+            align = None
+            for c in HISTORY_COLUMNS:
+                if c['key'] == key:
+                    width = c['width']
+                    align = c.get('align')
+                    break
+            if width is None:
+                width = AVAILABLE_HISTORY_COLUMNS[key]['width']
+            if align is None:
+                align = AVAILABLE_HISTORY_COLUMNS[key]['align']
+            all_columns.append({'key': key, 'width': width, 'align': align, 'active': is_active, 'is_custom': False})
+        
+        all_columns.sort(key=lambda c: c.get('label') or AVAILABLE_HISTORY_COLUMNS[c['key']]['label'])
+        
+        try:
+            stdscr.addstr(2, 2, "Columns (Arrows: scroll, Enter: toggle, +/-: width, a: align L/C/R):")
+            stdscr.addstr(3, 0, "─" * min(w, 80))
+        except curses.error:
+            pass
+        
+        y = 4
+        for i, col in enumerate(all_columns):
+            key = col['key']
+            label = col.get('label') or AVAILABLE_HISTORY_COLUMNS[key]['label']
+            width = col['width']
+            align = col['align']
+            marker = '[x]' if col['active'] else '[ ]'
+            if i == selected_idx:
+                prefix = '>'
+            else:
+                prefix = ' '
+            if col['active']:
+                try:
+                    if i == selected_idx:
+                        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12}  w:{width}  a:{align[0]}")
+                        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+                    else:
+                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12}  w:{width}  a:{align[0]}")
+                except curses.error:
+                    pass
+            else:
+                try:
+                    if i == selected_idx:
+                        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12}")
+                        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+                    else:
+                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12}")
+                except curses.error:
+                    pass
+        
+        header_y = 4 + len(all_columns) + 1
+        try:
+            stdscr.addstr(header_y, 2, "Preview:")
+        except curses.error:
+            pass
+        
+        sample_data = [
+            {'timestamp': '2024-01-15', 'name': 'Widget A', 'quantity': '5', 'price': '$19.99', 'total': '$99.95', 'po': 'PO-12345'},
+            {'timestamp': '2024-01-14', 'name': 'Gadget B', 'quantity': '2', 'price': '$49.00', 'total': '$98.00', 'po': ''},
+        ]
+        
+        col_positions = []
+        x = 2
+        for col in HISTORY_COLUMNS:
+            key = col['key']
+            label = AVAILABLE_HISTORY_COLUMNS[key]['label']
+            width = col['width']
+            align = col.get('align', 'left')
+            col_positions.append((key, x, width, align))
+            x += width + 1
+        
+        x = 2
+        for idx, col in enumerate(HISTORY_COLUMNS):
+            key = col['key']
+            label = AVAILABLE_HISTORY_COLUMNS[key]['label']
+            width = col['width']
+            align = col.get('align', 'left')
+            label_with_num = f"{label}({idx + 1})"
+            try:
+                if align == 'right':
+                    header_text = label_with_num[:width].rjust(width)
+                elif align == 'center':
+                    header_text = label_with_num[:width].center(width)
+                else:
+                    header_text = label_with_num[:width].ljust(width)
+                stdscr.addstr(header_y + 2, x, header_text)
+            except curses.error:
+                pass
+            x += width + 1
+        
+        separator_y = header_y + 3
+        for key, x, width, align in col_positions:
+            try:
+                stdscr.addstr(separator_y, x, '-' * width)
+            except curses.error:
+                pass
+        
+        for row_idx, row in enumerate(sample_data):
+            row_y = header_y + 4 + row_idx
+            if row_y >= h - 3:
+                break
+            for key, x, width, align in col_positions:
+                val = str(row.get(key, ''))[:width]
+                if align == 'right':
+                    formatted = val.rjust(width)
+                elif align == 'center':
+                    formatted = val.center(width)
+                else:
+                    formatted = val.ljust(width)
+                try:
+                    stdscr.addstr(row_y, x, formatted)
+                except curses.error:
+                    pass
+        
+        try:
+            stdscr.addstr(h-4, 0, "·" * min(w, 80))
+            stdscr.addstr(h-3, 2, "Enter/Arrows: toggle  +/-: width  a: align  d: default  q: back")
+            stdscr.addstr(h-2, 2, "(max 6 columns, width 3-30)")
+        except curses.error:
+            pass
+        
+        stdscr.refresh()
+        key = stdscr.getch()
+        
+        if key == ord('q'):
+            break
+        elif key == ord('d'):
+            HISTORY_COLUMNS[:] = [
+                {'key': 'timestamp', 'width': 10, 'align': 'left'},
+                {'key': 'name', 'width': 20, 'align': 'left'},
+                {'key': 'quantity', 'width': 4, 'align': 'right'},
+                {'key': 'price', 'width': 8, 'align': 'right'},
+                {'key': 'total', 'width': 10, 'align': 'right'},
+                {'key': 'po', 'width': 12, 'align': 'left'},
+            ]
+        elif key == curses.KEY_UP:
+            selected_idx = max(0, selected_idx - 1)
+        elif key == curses.KEY_DOWN:
+            selected_idx = min(len(all_columns) - 1, selected_idx + 1)
+        elif key in (curses.KEY_ENTER, 10, 13, ord(' ')):
+            col = all_columns[selected_idx]
+            if col['active']:
+                HISTORY_COLUMNS[:] = [c for c in HISTORY_COLUMNS if c['key'] != col['key']]
+            else:
+                if len(HISTORY_COLUMNS) < 6:
+                    HISTORY_COLUMNS.append({'key': col['key'], 'width': col['width'], 'align': col['align']})
+        elif key in (ord('+'), ord('=')):
+            col = all_columns[selected_idx]
+            if col['active']:
+                for c in HISTORY_COLUMNS:
+                    if c['key'] == col['key']:
+                        c['width'] = min(30, c['width'] + 1)
+                        break
+        elif key == ord('-'):
+            col = all_columns[selected_idx]
+            if col['active']:
+                for c in HISTORY_COLUMNS:
+                    if c['key'] == col['key']:
+                        c['width'] = max(3, c['width'] - 1)
+                        break
+        elif key == ord('a'):
+            col = all_columns[selected_idx]
+            if col['active']:
+                for c in HISTORY_COLUMNS:
                     if c['key'] == col['key']:
                         current_align = c.get('align', 'left')
                         if current_align == 'left':
@@ -896,14 +1197,16 @@ def config_menu(stdscr, inventory=None):
                 prefix1 = ">" if current_option == 1 else " "
                 prefix2 = ">" if current_option == 2 else " "
                 prefix3 = ">" if current_option == 3 else " "
+                prefix4 = ">" if current_option == 4 else " "
                 color_crit_status = "On" if COLOR_CRITICAL_ENABLED else "Off"
                 stdscr.addstr(y, 2, f"{prefix0} 1. Show stock alerts:  {color_crit_status}")
                 po_status = "On" if PO_ENABLED else "Off"
                 stdscr.addstr(y+1, 2, f"{prefix1} 2. PO Number:         {po_status}")
                 mon_status = "On" if MONETIZATION_ENABLED else "Off"
                 stdscr.addstr(y+2, 2, f"{prefix2} 3. Monetization:     {mon_status}")
-                stdscr.addstr(y+3, 2, f"{prefix3} 4. Column settings")
-                stdscr.addstr(y+5, 2, "(↑↓ or 1-4: select, Enter toggle)")
+                stdscr.addstr(y+3, 2, f"{prefix3} 4. Inventory columns")
+                stdscr.addstr(y+4, 2, f"{prefix4} 5. History columns")
+                stdscr.addstr(y+6, 2, "(↑↓ or 1-5: select, Enter toggle)")
             except curses.error:
                 pass
 
@@ -929,9 +1232,9 @@ def config_menu(stdscr, inventory=None):
         elif current_tab == 1 and key == curses.KEY_DOWN:
             current_option = (current_option + 1) % 7
         elif current_tab == 2 and key == curses.KEY_UP:
-            current_option = (current_option - 1) % 4
+            current_option = (current_option - 1) % 5
         elif current_tab == 2 and key == curses.KEY_DOWN:
-            current_option = (current_option + 1) % 4
+            current_option = (current_option + 1) % 5
         elif key in (10, curses.KEY_ENTER, ord(' ')):
             if current_tab == 1:
                 color_names = list(THEME_COLORS.keys())
@@ -951,6 +1254,8 @@ def config_menu(stdscr, inventory=None):
                     save_config()
                 elif current_option == 3:
                     column_config_menu(stdscr)
+                elif current_option == 4:
+                    history_column_config_menu(stdscr)
         elif key in (ord('q'), ord('b')):
             break
         elif current_tab == 1 and 49 <= key <= 55:
@@ -991,6 +1296,9 @@ def config_menu(stdscr, inventory=None):
         elif current_tab == 2 and key == ord('4'):
             current_option = 3
             column_config_menu(stdscr)
+        elif current_tab == 2 and key == ord('5'):
+            current_option = 4
+            history_column_config_menu(stdscr)
         elif current_tab == 0 and key == ord('a'):
                 if len(CUSTOM_FIELDS) >= 5:
                     try:
