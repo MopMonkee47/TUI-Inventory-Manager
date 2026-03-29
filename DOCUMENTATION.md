@@ -147,20 +147,20 @@ Each inventory item is represented by an `Item` instance with 8 built-in fields 
 3. **Display** - Low stock threshold, critical stock, PO toggle, column configuration
 
 **Settings Tab Options:**
-- Theme color (↑↓/jk/1-7): Select color, Enter/Space to apply
+- Theme color (↑↓ or 1-7): Select color, Enter to apply
 - Program name (n): Customize the program name displayed in title
 - Subtitle (s): Customize the subtitle shown below the title
 
 **Display Tab Options:**
-- Show stock alerts (↑↓/jk/1): Toggle yellow/red coloring for low/critical stock items
+- Show stock alerts (↑↓ or 1): Toggle yellow/red coloring for low/critical stock items
 - PO Number (2): Toggle PO number tracking on/off for sales
 - Monetization (3): Toggle price input when recording sales
 - Column settings (4): Open column configuration menu
 
 **Navigation Controls:**
 - ←/→ or h/l: Switch between tabs
-- ↑/↓ or j/k: Navigate options within Settings/Display tabs
-- Enter or Space: Select/apply current option
+- ↑/↓: Navigate options within Settings/Display tabs
+- Enter: Select/apply current option
 - Number keys (1-7 in Settings, 1-4 in Display): Quick-select and apply
 
 **Important Implementation Notes:**

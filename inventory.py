@@ -726,9 +726,9 @@ def column_config_menu(stdscr):
                 {'key': 'location', 'width': 10, 'align': 'left'},
                 {'key': 'description', 'width': 20, 'align': 'left'},
             ]
-        elif key in (curses.KEY_UP, ord('k')):
+        elif key == curses.KEY_UP:
             selected_idx = max(0, selected_idx - 1)
-        elif key in (curses.KEY_DOWN, ord('j')):
+        elif key == curses.KEY_DOWN:
             selected_idx = min(len(all_columns) - 1, selected_idx + 1)
         elif key in (curses.KEY_ENTER, 10, 13, ord(' ')):
             col = all_columns[selected_idx]
@@ -877,7 +877,7 @@ def config_menu(stdscr, inventory=None):
                     except curses.error:
                         pass
                 y += len(color_options) + 1
-                stdscr.addstr(y, 2, "(↑↓/jk/1-7: select, Enter: change)")
+                stdscr.addstr(y, 2, "(↑↓ or 1-7: select, Enter change)")
                 y += 2
                 stdscr.addstr(y, 2, "Program Name (max 40 chars):")
                 stdscr.addstr(y+1, 2, f"  {PROGRAM_NAME}")
@@ -903,13 +903,13 @@ def config_menu(stdscr, inventory=None):
                 mon_status = "On" if MONETIZATION_ENABLED else "Off"
                 stdscr.addstr(y+2, 2, f"{prefix2} 3. Monetization:     {mon_status}")
                 stdscr.addstr(y+3, 2, f"{prefix3} 4. Column settings")
-                stdscr.addstr(y+5, 2, "(↑↓/jk/1-4: select, Enter: toggle)")
+                stdscr.addstr(y+5, 2, "(↑↓ or 1-4: select, Enter toggle)")
             except curses.error:
                 pass
 
         try:
             stdscr.addstr(h-2, 0, "·" * min(w, 80))
-            stdscr.addstr(h-1, 0, f"←/→: tabs  ↑↓/jk: navigate  Enter/Space: select".ljust(w-1))
+            stdscr.addstr(h-1, 0, f"←/→: tabs  ↑↓: navigate  Enter: select".ljust(w-1))
         except curses.error:
             pass
 
@@ -924,13 +924,13 @@ def config_menu(stdscr, inventory=None):
         elif key in (curses.KEY_RIGHT, ord('l')):
             current_tab = (current_tab + 1) % len(TABS)
             current_option = 0
-        elif current_tab == 1 and key in (curses.KEY_UP, ord('k')):
+        elif current_tab == 1 and key == curses.KEY_UP:
             current_option = (current_option - 1) % 7
-        elif current_tab == 1 and key in (curses.KEY_DOWN, ord('j')):
+        elif current_tab == 1 and key == curses.KEY_DOWN:
             current_option = (current_option + 1) % 7
-        elif current_tab == 2 and key in (curses.KEY_UP, ord('k')):
+        elif current_tab == 2 and key == curses.KEY_UP:
             current_option = (current_option - 1) % 4
-        elif current_tab == 2 and key in (curses.KEY_DOWN, ord('j')):
+        elif current_tab == 2 and key == curses.KEY_DOWN:
             current_option = (current_option + 1) % 4
         elif key in (10, curses.KEY_ENTER, ord(' ')):
             if current_tab == 1:
