@@ -147,19 +147,38 @@ Each inventory item is represented by an `Item` instance with 8 built-in fields 
 3. **Display** - Low stock threshold, critical stock, PO toggle, column configuration
 
 **Settings Tab Options:**
-- Theme color (1-7): Change title/header color
+- Theme color (↑↓/jk/1-7): Select color, Enter/Space to apply
 - Program name (n): Customize the program name displayed in title
 - Subtitle (s): Customize the subtitle shown below the title
 
 **Display Tab Options:**
-- Show stock alerts (1): Toggle yellow/red coloring for low/critical stock items
+- Show stock alerts (↑↓/jk/1): Toggle yellow/red coloring for low/critical stock items
 - PO Number (2): Toggle PO number tracking on/off for sales
 - Monetization (3): Toggle price input when recording sales
 - Column settings (4): Open column configuration menu
 
-**Note:** Stock alert thresholds are now per-item settings. Each item can have its own low stock threshold and critical stock level, configurable in the item detail/edit screen (press Enter on an item, then e to edit, then L for low stock threshold or R for critical stock threshold). Defaults are 5 for low stock and 3 for critical.
+**Navigation Controls:**
+- ←/→ or h/l: Switch between tabs
+- ↑/↓ or j/k: Navigate options within Settings/Display tabs
+- Enter or Space: Select/apply current option
+- Number keys (1-7 in Settings, 1-4 in Display): Quick-select and apply
 
-**Note:** When adding new toggle options to Display Settings, ensure the On/Off values align with existing options (e.g., `"  {po_status}"` for PO Number). Use consistent spacing to maintain visual alignment.
+**Important Implementation Notes:**
+
+1. **Color pair reinitialization:** When changing THEME_COLOR in config_menu, you MUST call `curses.init_pair(1, THEME_COLOR, curses.COLOR_BLACK)` to apply the color change immediately within the settings menu.
+
+2. **Tab selection state:** When switching tabs with ←/→, reset `current_option = 0` to avoid stale selection state.
+
+3. **Enter key handling:** The Enter key handler for tab navigation must come AFTER the selection/apply handler, otherwise it intercepts Enter before the selection code runs. Use separate handlers: `(ord('q'), ord('b'))` for quit, and `(10, curses.KEY_ENTER, ord(' '))` for selection.
+
+4. **Display toggle alignment:** Use consistent spacing after the colon for all toggle options. Example:
+   ```python
+   stdscr.addstr(y, 2, f"1. Show stock alerts:  {color_crit_status}")
+   stdscr.addstr(y+1, 2, f"2. PO Number:         {po_status}")
+   stdscr.addstr(y+2, 2, f"3. Monetization:     {mon_status}")
+   ```
+
+**Note:** Stock alert thresholds are now per-item settings. Each item can have its own low stock threshold and critical stock level, configurable in the item detail/edit screen (press Enter on an item, then e to edit, then L for low stock threshold or R for critical stock threshold). Defaults are 5 for low stock and 3 for critical.
 
 **Input cursor positioning:** When prompting for user input with a colon (e.g., "Enter new value: "), the cursor position for `getstr()` should be the starting column plus the length of the prompt string. This ensures the cursor starts after the colon and space, not overwriting the prompt. For example, a prompt starting at column 2 with "Value: " (8 chars) uses position 2 + 8 = 10.
 

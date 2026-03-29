@@ -782,6 +782,7 @@ def config_menu(stdscr, inventory=None):
 
     TABS = ["Custom Fields", "Settings", "Display"]
     current_tab = 0
+    current_option = 0
 
     while True:
         stdscr.clear()
@@ -867,7 +868,7 @@ def config_menu(stdscr, inventory=None):
                 y += 1
                 color_options = list(THEME_COLORS.keys())
                 for i, color_name in enumerate(color_options):
-                    prefix = ">" if color_name == current_color_name else " "
+                    prefix = ">" if i == current_option else " "
                     try:
                         stdscr.addstr(y + i, 2, f"{i+1}. {prefix} ")
                         stdscr.attron(curses.color_pair(THEME_COLOR_PAIRS[color_name]))
@@ -876,7 +877,7 @@ def config_menu(stdscr, inventory=None):
                     except curses.error:
                         pass
                 y += len(color_options) + 1
-                stdscr.addstr(y, 2, "(press 1-7 to change)")
+                stdscr.addstr(y, 2, "(↑↓/jk/1-7: select, Enter: change)")
                 y += 2
                 stdscr.addstr(y, 2, "Program Name (max 40 chars):")
                 stdscr.addstr(y+1, 2, f"  {PROGRAM_NAME}")
@@ -891,20 +892,24 @@ def config_menu(stdscr, inventory=None):
         if current_tab == 2:
             y = content_top
             try:
+                prefix0 = ">" if current_option == 0 else " "
+                prefix1 = ">" if current_option == 1 else " "
+                prefix2 = ">" if current_option == 2 else " "
+                prefix3 = ">" if current_option == 3 else " "
                 color_crit_status = "On" if COLOR_CRITICAL_ENABLED else "Off"
-                stdscr.addstr(y, 2, f"1. Show stock alerts:   {color_crit_status}")
+                stdscr.addstr(y, 2, f"{prefix0} 1. Show stock alerts:  {color_crit_status}")
                 po_status = "On" if PO_ENABLED else "Off"
-                stdscr.addstr(y+1, 2, f"2. PO Number:            {po_status}")
+                stdscr.addstr(y+1, 2, f"{prefix1} 2. PO Number:         {po_status}")
                 mon_status = "On" if MONETIZATION_ENABLED else "Off"
-                stdscr.addstr(y+2, 2, f"3. Monetization:         {mon_status}")
-                stdscr.addstr(y+3, 2, "4. Column settings")
-                stdscr.addstr(y+5, 2, "(press 1-4 to edit)")
+                stdscr.addstr(y+2, 2, f"{prefix2} 3. Monetization:     {mon_status}")
+                stdscr.addstr(y+3, 2, f"{prefix3} 4. Column settings")
+                stdscr.addstr(y+5, 2, "(↑↓/jk/1-4: select, Enter: toggle)")
             except curses.error:
                 pass
 
         try:
             stdscr.addstr(h-2, 0, "·" * min(w, 80))
-            stdscr.addstr(h-1, 0, f"←/→: tabs  Enter: Return".ljust(w-1))
+            stdscr.addstr(h-1, 0, f"←/→: tabs  ↑↓/jk: navigate  Enter/Space: select".ljust(w-1))
         except curses.error:
             pass
 
@@ -915,16 +920,47 @@ def config_menu(stdscr, inventory=None):
             continue
         elif key in (curses.KEY_LEFT, ord('h')):
             current_tab = (current_tab - 1) % len(TABS)
+            current_option = 0
         elif key in (curses.KEY_RIGHT, ord('l')):
             current_tab = (current_tab + 1) % len(TABS)
-        elif key in (10, curses.KEY_ENTER, ord('q'), ord('b')):
+            current_option = 0
+        elif current_tab == 1 and key in (curses.KEY_UP, ord('k')):
+            current_option = (current_option - 1) % 7
+        elif current_tab == 1 and key in (curses.KEY_DOWN, ord('j')):
+            current_option = (current_option + 1) % 7
+        elif current_tab == 2 and key in (curses.KEY_UP, ord('k')):
+            current_option = (current_option - 1) % 4
+        elif current_tab == 2 and key in (curses.KEY_DOWN, ord('j')):
+            current_option = (current_option + 1) % 4
+        elif key in (10, curses.KEY_ENTER, ord(' ')):
+            if current_tab == 1:
+                color_names = list(THEME_COLORS.keys())
+                if 0 <= current_option < len(color_names):
+                    THEME_COLOR = THEME_COLORS[color_names[current_option]]
+                    curses.init_pair(1, THEME_COLOR, curses.COLOR_BLACK)
+                    save_config()
+            elif current_tab == 2:
+                if current_option == 0:
+                    COLOR_CRITICAL_ENABLED = not COLOR_CRITICAL_ENABLED
+                    save_config()
+                elif current_option == 1:
+                    PO_ENABLED = not PO_ENABLED
+                    save_config()
+                elif current_option == 2:
+                    MONETIZATION_ENABLED = not MONETIZATION_ENABLED
+                    save_config()
+                elif current_option == 3:
+                    column_config_menu(stdscr)
+        elif key in (ord('q'), ord('b')):
             break
         elif current_tab == 1 and 49 <= key <= 55:
             try:
                 idx = key - 49
+                current_option = idx
                 color_names = list(THEME_COLORS.keys())
                 if 0 <= idx < len(color_names):
                     THEME_COLOR = THEME_COLORS[color_names[idx]]
+                    curses.init_pair(1, THEME_COLOR, curses.COLOR_BLACK)
                     save_config()
             except Exception as e:
                 pass
@@ -941,15 +977,19 @@ def config_menu(stdscr, inventory=None):
             except:
                 curses.noecho()
         elif current_tab == 2 and key == ord('1'):
+            current_option = 0
             COLOR_CRITICAL_ENABLED = not COLOR_CRITICAL_ENABLED
             save_config()
         elif current_tab == 2 and key == ord('2'):
+            current_option = 1
             PO_ENABLED = not PO_ENABLED
             save_config()
         elif current_tab == 2 and key == ord('3'):
+            current_option = 2
             MONETIZATION_ENABLED = not MONETIZATION_ENABLED
             save_config()
         elif current_tab == 2 and key == ord('4'):
+            current_option = 3
             column_config_menu(stdscr)
         elif current_tab == 0 and key == ord('a'):
                 if len(CUSTOM_FIELDS) >= 5:
