@@ -440,27 +440,28 @@ def view_sales_history(stdscr):
                 stdscr.attron(curses.color_pair(1))
                 stdscr.addstr(0, 0, "Sales History".center(min(w, 100)))
                 stdscr.attroff(curses.color_pair(1))
+                stdscr.addstr(1, 0, "")
 
                 dir_symbol = "↓" if direction < 0 else "↑"
                 status = f"Search: {search_term or '(none)'}   Sort: {sort_key} {dir_symbol}   (s:search n:name t:time q:qty $:total)"
                 try:
-                    stdscr.addstr(1, 0, status[:w-1])
+                    stdscr.addstr(2, 0, status[:w-1])
                 except curses.error:
                     pass
 
                 try:
-                    stdscr.addstr(2, 0, "─" * min(w, 80))
+                    stdscr.addstr(3, 0, "─" * min(w, 80))
                 except curses.error:
                     pass
 
                 try:
-                    stdscr.addstr(5, 0, "DATE       NAME                 QTY  PRICE     TOTAL    PO")
-                    stdscr.addstr(6, 0, "---------- -------------------- --- -------- -------- ----------")
-                    stdscr.addstr(6, 75, "more ->")
+                    stdscr.addstr(6, 0, "DATE       NAME                 QTY  PRICE     TOTAL    PO")
+                    stdscr.addstr(7, 0, "---------- -------------------- --- -------- -------- ----------")
+                    stdscr.addstr(7, 75, "more ->")
                 except curses.error:
                     pass
 
-                y = 7
+                y = 8
 
                 max_lines = h - y - 4
                 for row in rows[:max_lines]:
@@ -804,6 +805,7 @@ def config_menu(stdscr, inventory=None):
             stdscr.attron(curses.color_pair(1))
             stdscr.addstr(0, 0, (PROGRAM_NAME + " Settings").center(min(w, 100)))
             stdscr.attroff(curses.color_pair(1))
+            stdscr.addstr(1, 0, "")
         except curses.error:
             pass
 
@@ -813,11 +815,11 @@ def config_menu(stdscr, inventory=None):
                 x = i * tab_width
                 if i == current_tab:
                     stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
-                    stdscr.addstr(1, x, f" {tab} ")
+                    stdscr.addstr(2, x, f" {tab} ")
                     stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
                 else:
-                    stdscr.addstr(1, x, f" {tab} ")
-            stdscr.addstr(2, 0, "─" * min(w, 80))
+                    stdscr.addstr(2, x, f" {tab} ")
+            stdscr.addstr(3, 0, "─" * min(w, 80))
         except curses.error:
             pass
 
@@ -1780,11 +1782,13 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     stdscr.attron(curses.color_pair(1))
     stdscr.addstr(0, 0, PROGRAM_NAME.center(min(w, 100)))
     stdscr.attroff(curses.color_pair(1))
+    stdscr.addstr(1, 0, "")
 
     dir_symbol = "↓" if direction > 0 else "↑"
-    stdscr.addstr(1, 0, f"Search: {search_term or '(none)'}   Sort: {sort_key} {dir_symbol}   (s:search #:sort)")
+    stdscr.addstr(2, 0, f"Search: {search_term or '(none)'}   Sort: {sort_key} {dir_symbol}   (s:search #:sort ESC:clear search)")
 
-    stdscr.addstr(2, 0, "─" * min(w, 100))
+    stdscr.addstr(3, 0, "─" * min(w, 100))
+    stdscr.addstr(4, 0, "")
 
     header_parts = []
     for idx, col in enumerate(COLUMNS):
@@ -1804,13 +1808,13 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
             header_parts.append(label.ljust(width))
     headers = "  ".join(header_parts)
     stdscr.attron(curses.color_pair(1))
-    stdscr.addstr(3, 0, headers[:w])
+    stdscr.addstr(5, 0, headers[:w])
     header_dashes = "  ".join([col['width'] * '-' for col in COLUMNS])
-    stdscr.addstr(4, 0, header_dashes[:w])
+    stdscr.addstr(6, 0, header_dashes[:w])
     stdscr.attroff(curses.color_pair(1))
     
     for idx, item in enumerate(filtered):
-        y = idx + 5
+        y = idx + 7
         if y >= h - 3: break
 
         row_parts = []
@@ -1972,11 +1976,12 @@ def inline_search(stdscr, current_term):
         stdscr.attron(curses.color_pair(1))
         stdscr.addstr(0, 0, PROGRAM_NAME.center(min(w, 100)))
         stdscr.attroff(curses.color_pair(1))
+        stdscr.addstr(1, 0, "")
         
         prompt = f"Search: {search_term}_"
-        stdscr.addstr(1, 0, prompt[:w-1])
-        stdscr.addstr(2, 0, "Press Enter to search, Esc to cancel, Backspace to delete")
-        stdscr.addstr(3, 0, "─" * min(w, 100))
+        stdscr.addstr(2, 0, prompt[:w-1])
+        stdscr.addstr(3, 0, "Press Enter to search, Esc to cancel, Backspace to delete")
+        stdscr.addstr(4, 0, "─" * min(w, 100))
         
         stdscr.attron(curses.color_pair(1))
         header_parts = []
@@ -1996,12 +2001,12 @@ def inline_search(stdscr, current_term):
             else:
                 header_parts.append(label.ljust(width))
         headers = "  ".join(header_parts)
-        stdscr.addstr(4, 0, headers[:w])
+        stdscr.addstr(5, 0, headers[:w])
         header_dashes = "  ".join([col['width'] * '-' for col in COLUMNS])
-        stdscr.addstr(5, 0, header_dashes[:w])
+        stdscr.addstr(6, 0, header_dashes[:w])
         stdscr.attroff(curses.color_pair(1))
         
-        stdscr.move(1, 8 + cursor_pos)
+        stdscr.move(2, 8 + cursor_pos)
         stdscr.refresh()
         curses.doupdate()
         
