@@ -823,7 +823,7 @@ def config_menu(stdscr, inventory=None):
         except curses.error:
             pass
 
-        content_top = 3
+        content_top = 4
 
         if current_tab == 0:
             y = content_top
@@ -863,9 +863,8 @@ def config_menu(stdscr, inventory=None):
             y = content_top
             current_color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
             try:
-                stdscr.addstr(y, 2, "Settings")
-                stdscr.addstr(y+2, 2, "Theme Color (titles & splash):")
-                y += 3
+                stdscr.addstr(y, 2, "Theme Color (titles & splash):")
+                y += 1
                 color_options = list(THEME_COLORS.keys())
                 for i, color_name in enumerate(color_options):
                     prefix = ">" if color_name == current_color_name else " "
@@ -892,15 +891,14 @@ def config_menu(stdscr, inventory=None):
         if current_tab == 2:
             y = content_top
             try:
-                stdscr.addstr(y, 2, "Display Settings")
                 color_crit_status = "On" if COLOR_CRITICAL_ENABLED else "Off"
-                stdscr.addstr(y+2, 2, f"1. Show stock alerts:   {color_crit_status}")
+                stdscr.addstr(y, 2, f"1. Show stock alerts:   {color_crit_status}")
                 po_status = "On" if PO_ENABLED else "Off"
-                stdscr.addstr(y+3, 2, f"2. PO Number:            {po_status}")
+                stdscr.addstr(y+1, 2, f"2. PO Number:            {po_status}")
                 mon_status = "On" if MONETIZATION_ENABLED else "Off"
-                stdscr.addstr(y+4, 2, f"3. Monetization:         {mon_status}")
-                stdscr.addstr(y+5, 2, "4. Column settings")
-                stdscr.addstr(y+7, 2, "(press 1-4 to edit)")
+                stdscr.addstr(y+2, 2, f"3. Monetization:         {mon_status}")
+                stdscr.addstr(y+3, 2, "4. Column settings")
+                stdscr.addstr(y+5, 2, "(press 1-4 to edit)")
             except curses.error:
                 pass
 
@@ -1807,11 +1805,9 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
         else:
             header_parts.append(label.ljust(width))
     headers = "  ".join(header_parts)
-    stdscr.attron(curses.color_pair(1))
     stdscr.addstr(5, 0, headers[:w])
     header_dashes = "  ".join([col['width'] * '-' for col in COLUMNS])
     stdscr.addstr(6, 0, header_dashes[:w])
-    stdscr.attroff(curses.color_pair(1))
     
     for idx, item in enumerate(filtered):
         y = idx + 7
