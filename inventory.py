@@ -1749,12 +1749,31 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
 
     direction = sort_directions.get(sort_key, 1)
 
-    if sort_key == 'name':
-        filtered.sort(key=lambda x: x.name.lower(), reverse=(direction < 0))
-    elif sort_key == 'quantity':
-        filtered.sort(key=lambda x: x.quantity, reverse=(direction < 0))
-    elif sort_key == 'location':
-        filtered.sort(key=lambda x: x.location.lower(), reverse=(direction < 0))
+    def get_sort_value(item):
+        if sort_key == 'name':
+            return item.name.lower()
+        elif sort_key == 'quantity':
+            return item.quantity
+        elif sort_key == 'location':
+            return item.location.lower()
+        elif sort_key == 'cost':
+            return item.cost
+        elif sort_key == 'description':
+            return item.description.lower()
+        elif sort_key == 'min_value':
+            return item.min_value
+        elif sort_key == 'max_value':
+            return item.max_value
+        elif sort_key == 'sale':
+            return item.sale
+        elif sort_key.startswith('custom_'):
+            val = item.custom.get(sort_key[7:], '')
+            if isinstance(val, (int, float)):
+                return val
+            return str(val).lower()
+        return ''
+
+    filtered.sort(key=get_sort_value, reverse=(direction < 0))
 
     original_indices = [inventory.index(item) for item in filtered]
 
@@ -1763,17 +1782,18 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     stdscr.attroff(curses.color_pair(1))
 
     dir_symbol = "↓" if direction > 0 else "↑"
-    stdscr.addstr(1, 0, f"Search: {search_term or '(none)'}   Sort: {sort_key} {dir_symbol}   (s:search n:name t:qty l:loc)")
+    stdscr.addstr(1, 0, f"Search: {search_term or '(none)'}   Sort: {sort_key} {dir_symbol}   (s:search #:sort)")
 
     stdscr.addstr(2, 0, "─" * min(w, 100))
 
     header_parts = []
-    for col in COLUMNS:
+    for idx, col in enumerate(COLUMNS):
         key = col['key']
         if key.startswith('custom_'):
             label = col.get('label', key)
         else:
             label = AVAILABLE_COLUMNS[key]['label']
+        label = f"{label}({idx + 1})"
         width = col['width']
         align = col.get('align', 'left')
         if align == 'right':
@@ -1785,10 +1805,12 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     headers = "  ".join(header_parts)
     stdscr.attron(curses.color_pair(1))
     stdscr.addstr(3, 0, headers[:w])
+    header_dashes = "  ".join([col['width'] * '-' for col in COLUMNS])
+    stdscr.addstr(4, 0, header_dashes[:w])
     stdscr.attroff(curses.color_pair(1))
     
     for idx, item in enumerate(filtered):
-        y = idx + 4
+        y = idx + 5
         if y >= h - 3: break
 
         row_parts = []
@@ -1939,6 +1961,82 @@ def show_splash(stdscr):
         elif key == curses.KEY_RESIZE:
             continue
 
+def inline_search(stdscr, current_term):
+    global COLUMNS, AVAILABLE_COLUMNS
+    load_config()
+    h, w = stdscr.getmaxyx()
+    search_term = current_term
+    cursor_pos = len(search_term) if search_term else 0
+    while True:
+        stdscr.clear()
+        stdscr.attron(curses.color_pair(1))
+        stdscr.addstr(0, 0, PROGRAM_NAME.center(min(w, 100)))
+        stdscr.attroff(curses.color_pair(1))
+        
+        prompt = f"Search: {search_term}_"
+        stdscr.addstr(1, 0, prompt[:w-1])
+        stdscr.addstr(2, 0, "Press Enter to search, Esc to cancel, Backspace to delete")
+        stdscr.addstr(3, 0, "─" * min(w, 100))
+        
+        stdscr.attron(curses.color_pair(1))
+        header_parts = []
+        for idx, col in enumerate(COLUMNS):
+            key = col['key']
+            if key.startswith('custom_'):
+                label = col.get('label', key)
+            else:
+                label = AVAILABLE_COLUMNS[key]['label']
+            label = f"{label}({idx + 1})"
+            width = col['width']
+            align = col.get('align', 'left')
+            if align == 'right':
+                header_parts.append(label.rjust(width))
+            elif align == 'center':
+                header_parts.append(label.center(width))
+            else:
+                header_parts.append(label.ljust(width))
+        headers = "  ".join(header_parts)
+        stdscr.addstr(4, 0, headers[:w])
+        header_dashes = "  ".join([col['width'] * '-' for col in COLUMNS])
+        stdscr.addstr(5, 0, header_dashes[:w])
+        stdscr.attroff(curses.color_pair(1))
+        
+        stdscr.move(1, 8 + cursor_pos)
+        stdscr.refresh()
+        curses.doupdate()
+        
+        key = stdscr.getch()
+        
+        if key == 27:
+            return ""
+        
+        if key == -1:
+            continue
+        
+        if key in (10, curses.KEY_ENTER):
+            return search_term
+        elif key == 27:
+            return ""
+        elif key in (curses.KEY_BACKSPACE, 127, 8):
+            if cursor_pos > 0:
+                search_term = search_term[:cursor_pos-1] + search_term[cursor_pos:]
+                cursor_pos -= 1
+        elif 32 <= key <= 126:
+            if cursor_pos < 30:
+                char = chr(key)
+                search_term = search_term[:cursor_pos] + char + search_term[cursor_pos:]
+                cursor_pos += 1
+        elif key == curses.KEY_RESIZE:
+            continue
+        elif key == curses.KEY_LEFT and cursor_pos > 0:
+            cursor_pos -= 1
+        elif key == curses.KEY_RIGHT and cursor_pos < len(search_term):
+            cursor_pos += 1
+        elif key == curses.KEY_HOME:
+            cursor_pos = 0
+        elif key == curses.KEY_END:
+            cursor_pos = len(search_term)
+
 def main(stdscr):
     load_config()
     curses.curs_set(0)
@@ -1948,6 +2046,7 @@ def main(stdscr):
     curses.init_pair(2, curses.COLOR_YELLOW, -1)
     curses.init_pair(3, curses.COLOR_RED,    -1)
     curses.init_pair(4, curses.COLOR_GREEN,  -1)
+    curses.set_escdelay(25)
 
     show_splash(stdscr)
 
@@ -1959,10 +2058,14 @@ def main(stdscr):
     sort_directions = {'name': 1, 'quantity': 1, 'location': 1}
 
     while True:
+        stdscr.timeout(-1)
         # ── Always check size first ───────────────────────────────────────
         if not check_size(stdscr):
             # If too small → wait for resize or any key press
-            stdscr.getch()
+            try:
+                stdscr.getch()
+            except KeyboardInterrupt:
+                return
             stdscr.clear()
             stdscr.refresh()
             continue
@@ -1998,8 +2101,13 @@ def main(stdscr):
             selected_row_idx = 0
 
         elif key == ord('s'):
-            search_term = search_mode(stdscr)
+            search_term = inline_search(stdscr, search_term)
             selected_row_idx = 0
+
+        elif key == 27:
+            if search_term:
+                search_term = ""
+                selected_row_idx = 0
 
         elif key in (ord('n'), ord('t'), ord('l')):
             key_map = {ord('n'):'name', ord('t'):'quantity', ord('l'):'location'}
@@ -2010,6 +2118,17 @@ def main(stdscr):
                 sort_key = new_key
                 sort_directions[sort_key] = 1
             selected_row_idx = 0
+
+        elif ord('1') <= key <= ord('9'):
+            col_idx = key - ord('1')
+            if col_idx < len(COLUMNS):
+                new_key = COLUMNS[col_idx]['key']
+                if new_key == sort_key:
+                    sort_directions[sort_key] *= -1
+                else:
+                    sort_key = new_key
+                    sort_directions[sort_key] = 1
+                selected_row_idx = 0
 
         elif key == ord('r') and filtered_len > 0:
             orig_idx = original_indices[selected_row_idx]
