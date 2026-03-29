@@ -1445,21 +1445,21 @@ def add_item(stdscr, inventory):
 
 def select_field_to_edit(stdscr, item):
     options = [
-        "1. Name",
-        "2. Quantity",
-        "3. Cost",
-        "4. Location",
-        "5. Description",
-        "6. Min Value (hidden)",
-        "7. Max Value (hidden)",
-        "8. Sale Price (hidden)",
-        "9. All fields",
+        "1.  Name",
+        "2.  Quantity",
+        "3.  Cost",
+        "4.  Location",
+        "5.  Description",
+        "6.  Min Value (hidden)",
+        "7.  Max Value (hidden)",
+        "8.  Sale Price (hidden)",
+        "9.  All fields",
     ]
     for i, field in enumerate(CUSTOM_FIELDS):
         options.append(f"{10 + i}. {field['label']} (custom)")
-    options.append("L. Low stock threshold")
-    options.append("R. Critical stock threshold")
-    options.append("0. Cancel")
+    options.append("L.  Low stock threshold")
+    options.append("R.  Critical stock threshold")
+    options.append("0.  Cancel")
 
     option_values = list(range(1, 10)) + list(range(10, 10 + len(CUSTOM_FIELDS))) + ['L', 'R', 'C', None]
     
