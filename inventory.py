@@ -1199,11 +1199,11 @@ def config_menu(stdscr, inventory=None):
                 prefix3 = ">" if current_option == 3 else " "
                 prefix4 = ">" if current_option == 4 else " "
                 color_crit_status = "On" if COLOR_CRITICAL_ENABLED else "Off"
-                stdscr.addstr(y, 2, f"{prefix0} 1. Show stock alerts:  {color_crit_status}")
+                stdscr.addstr(y, 2, f"{prefix0} 1. {'Show stock alerts':<17}: {color_crit_status}")
                 po_status = "On" if PO_ENABLED else "Off"
-                stdscr.addstr(y+1, 2, f"{prefix1} 2. PO Number:         {po_status}")
+                stdscr.addstr(y+1, 2, f"{prefix1} 2. {'PO Number':<17}: {po_status}")
                 mon_status = "On" if MONETIZATION_ENABLED else "Off"
-                stdscr.addstr(y+2, 2, f"{prefix2} 3. Monetization:     {mon_status}")
+                stdscr.addstr(y+2, 2, f"{prefix2} 3. {'Monetization':<17}: {mon_status}")
                 stdscr.addstr(y+3, 2, f"{prefix3} 4. Inventory columns")
                 stdscr.addstr(y+4, 2, f"{prefix4} 5. History columns")
                 stdscr.addstr(y+6, 2, "(↑↓ or 1-5: select, Enter toggle)")
@@ -1423,7 +1423,15 @@ def add_item(stdscr, inventory):
         stdscr.getch()
         return
 
-    new_item = Item(name, int(quantity), float(cost), 0.0, 0.0, 0.0, location, description)
+    try:
+        new_item = Item(name, int(quantity or "0"), float(cost or "0"), 0.0, 0.0, 0.0, location, description)
+    except (ValueError, TypeError) as e:
+        stdscr.clear()
+        stdscr.addstr(2, 0, f"Cannot add item: {e}")
+        stdscr.addstr(4, 0, "Press any key...")
+        stdscr.getch()
+        return
+
     new_item.custom['low_stock_threshold'] = 5
     new_item.custom['critical_stock'] = 3
     inventory.append(new_item)
