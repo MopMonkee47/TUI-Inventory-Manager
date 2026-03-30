@@ -586,18 +586,17 @@ def view_sales_history(stdscr):
                     pass
                 y += 1
 
+            if search_term:
+                draw_footer(stdscr, "ESC/b:clear search  q: back")
+            else:
+                draw_footer(stdscr, "q: back")
+        except Exception as e:
             try:
-                if search_term:
-                    draw_footer(stdscr, "ESC/b:clear search  q: back")
-                else:
-                    draw_footer(stdscr, "q: back")
-            except Exception as e:
-                try:
-                    stdscr.addstr(2, 0, f"Error reading sales log: {str(e)[:60]}")
-                except:
-                    pass
-
-        stdscr.refresh()
+                stdscr.addstr(2, 0, f"Error reading sales log: {str(e)[:60]}")
+            except:
+                pass
+        else:
+            stdscr.refresh()
         key = stdscr.getch()
         
         if key == curses.KEY_RESIZE:
