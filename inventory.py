@@ -119,6 +119,14 @@ THEME_COLOR_PAIRS = {
 }
 THEME_COLOR = curses.COLOR_CYAN
 
+def draw_footer(stdscr, controls):
+    h, w = stdscr.getmaxyx()
+    try:
+        stdscr.addstr(h-2, 0, "·" * min(w, 80))
+        stdscr.addnstr(h-1, 0, controls.ljust(w-1), w-1)
+    except curses.error:
+        pass
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Config load/save
 # ──────────────────────────────────────────────────────────────────────────────
@@ -579,18 +587,15 @@ def view_sales_history(stdscr):
                 y += 1
 
             try:
-                stdscr.addstr(h-2, 0, "·" * min(w, 80))
                 if search_term:
-                    stdscr.addstr(h-1, 0, "ESC/b:clear search  q: back".ljust(w-1))
+                    draw_footer(stdscr, "ESC/b:clear search  q: back")
                 else:
-                    stdscr.addstr(h-1, 0, "q: back".ljust(w-1))
-            except curses.error:
-                pass
-        except Exception as e:
-            try:
-                stdscr.addstr(2, 0, f"Error reading sales log: {str(e)[:60]}")
-            except:
-                pass
+                    draw_footer(stdscr, "q: back")
+            except Exception as e:
+                try:
+                    stdscr.addstr(2, 0, f"Error reading sales log: {str(e)[:60]}")
+                except:
+                    pass
 
         stdscr.refresh()
         key = stdscr.getch()
@@ -1171,11 +1176,7 @@ def input_customization_menu(stdscr):
         except curses.error:
             pass
 
-        try:
-            stdscr.addstr(h-2, 0, "·" * min(w, 80))
-            stdscr.addstr(h-1, 0, f"↑↓: navigate  Enter: toggle  d: defaults  q: back".ljust(w-1))
-        except curses.error:
-            pass
+        draw_footer(stdscr, "↑↓: navigate  Enter: toggle  d: defaults  q: back")
 
         stdscr.refresh()
         key = stdscr.getch()
@@ -1261,12 +1262,7 @@ def about_menu(stdscr):
 
         max_scroll = max(0, len(lines) - visible_lines)
 
-        try:
-            stdscr.addstr(h-2, 0, "·" * min(w, 80))
-            controls = "↑↓: scroll  r: reset to default  q: back"
-            stdscr.addstr(h-1, 0, controls.ljust(w-1))
-        except curses.error:
-            pass
+        draw_footer(stdscr, "↑↓: scroll  r: reset to default  q: back")
 
         stdscr.refresh()
         key = stdscr.getch()
@@ -1432,11 +1428,7 @@ def config_menu(stdscr, inventory=None):
             except curses.error:
                 pass
 
-        try:
-            stdscr.addstr(h-2, 0, "·" * min(w, 80))
-            stdscr.addstr(h-1, 0, f"←/→: tabs  ↑↓: navigate  Enter: select  ?: about  q: back".ljust(w-1))
-        except curses.error:
-            pass
+        draw_footer(stdscr, "←/→: tabs  ↑↓: navigate  Enter: select  ?: about  q: back")
 
         stdscr.refresh()
         key = stdscr.getch()
@@ -1932,14 +1924,10 @@ def select_field_to_edit(stdscr, item):
             except:
                 pass
 
-        try:
-            stdscr.addstr(h-2, 0, "·" * min(w, 80))
-            if typed_input:
-                stdscr.addstr(h-1, 0, f"Enter → {typed_input}".ljust(w-1))
-            else:
-                stdscr.addstr(h-1, 0, "↑↓:select  Enter:confirm  type:number or L/C/R  q:back".ljust(w-1))
-        except:
-            pass
+        if typed_input:
+            draw_footer(stdscr, f"Enter → {typed_input}")
+        else:
+            draw_footer(stdscr, "↑↓:select  Enter:confirm  type:number or L/C/R  q:back")
 
         stdscr.refresh()
         key = stdscr.getch()
@@ -2437,11 +2425,7 @@ def view_details(stdscr, inventory, orig_idx):
         stdscr.addstr(y, 0, f"Description:   {item.description}")
         y += 2
 
-        h, w = stdscr.getmaxyx()
-        stdscr.addstr(h-2, 0, "·" * min(w, 80))
-
-        stdscr.addstr(h-1, 0, "e: edit   d: delete   c: configuration   q: back")
-        stdscr.refresh()
+        draw_footer(stdscr, "e: edit   d: delete   c: configuration   q: back")
 
         key = stdscr.getch()
 
@@ -2601,12 +2585,10 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
 
     total_items = len(filtered)
 
-    stdscr.addstr(h-2, 0, "·" * min(w, 80))
-
     stats = f"Items:{total_items}"
     controls = "q:quit a:add s:search d:delete r:sale h:history c:configure ENTER:details"
     footer = f"{stats} | {controls}"
-    stdscr.addnstr(h-1, 0, footer, w-1)
+    draw_footer(stdscr, footer)
 
     return filtered, original_indices
 
