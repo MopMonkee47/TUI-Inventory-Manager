@@ -2395,13 +2395,24 @@ def view_details(stdscr, inventory, orig_idx):
         standard_labels = ["Name:", "Quantity:", "Cost:", "Location:", "Low threshold:", "Critical:", "Min Value:", "Max Value:", "Sale:", "Margin:", "Description:"]
         all_labels = standard_labels + [f"{f['label']}:" for f in CUSTOM_FIELDS]
         label_width = max(len(l) for l in all_labels) + 2
+        pad_name = label_width - 5
+        pad_qty = label_width - 10
+        pad_cost = label_width - 5
+        pad_loc = label_width - 10
+        pad_low = label_width - 16
+        pad_crit = label_width - 10
+        pad_min = label_width - 11
+        pad_max = label_width - 11
+        pad_sale = label_width - 6
+        pad_margin = label_width - 8
+        pad_desc = label_width - 13
 
         stdscr.addstr(y, 0, "Item Details"); y += 2
 
-        stdscr.addstr(y, 0, f"Name:{'':>label_width-5}{item.name}"); y += 1
-        stdscr.addstr(y, 0, f"Quantity:{'':>label_width-10}{item.quantity:,}"); y += 1
-        stdscr.addstr(y, 0, f"Cost:{'':>label_width-5}{item.cost:,.2f}"); y += 1
-        stdscr.addstr(y, 0, f"Location:{'':>label_width-10}{item.location}"); y += 1
+        stdscr.addstr(y, 0, f"Name:{'':>{pad_name}}{item.name}"); y += 1
+        stdscr.addstr(y, 0, f"Quantity:{'':>{pad_qty}}{item.quantity:,}"); y += 1
+        stdscr.addstr(y, 0, f"Cost:{'':>{pad_cost}}{item.cost:,.2f}"); y += 1
+        stdscr.addstr(y, 0, f"Location:{'':>{pad_loc}}{item.location}"); y += 1
 
         for field in CUSTOM_FIELDS:
             value = item.custom.get(field['name'], "")
@@ -2410,22 +2421,24 @@ def view_details(stdscr, inventory, orig_idx):
                 disp = f"${value:,.2f}"
             elif field['type'] == 'number' and isinstance(value, (int, float)):
                 disp = f"{value:,}"
-            stdscr.addstr(y, 0, f"{field['label']}:{'':>label_width - len(field['label']) - 1}{disp}"); y += 1
+            field_label = field['label']
+            pad = label_width - len(field_label) - 1
+            stdscr.addstr(y, 0, f"{field_label}:{'':>{pad}}{disp}"); y += 1
 
         low_thresh = item.custom.get('low_stock_threshold', 5)
         crit_thresh = item.custom.get('critical_stock', 3)
-        stdscr.addstr(y, 0, f"Low threshold:{'':>label_width-16}{low_thresh}"); y += 1
-        stdscr.addstr(y, 0, f"Critical:{'':>label_width-10}{crit_thresh}"); y += 1
+        stdscr.addstr(y, 0, f"Low threshold:{'':>{pad_low}}{low_thresh}"); y += 1
+        stdscr.addstr(y, 0, f"Critical:{'':>{pad_crit}}{crit_thresh}"); y += 1
 
-        stdscr.addstr(y, 0, f"Min Value:{'':>label_width-11}{item.min_value:,.2f}"); y += 1
-        stdscr.addstr(y, 0, f"Max Value:{'':>label_width-11}{item.max_value:,.2f}"); y += 1
-        stdscr.addstr(y, 0, f"Sale:{'':>label_width-6}{item.sale:,.2f}"); y += 1
+        stdscr.addstr(y, 0, f"Min Value:{'':>{pad_min}}{item.min_value:,.2f}"); y += 1
+        stdscr.addstr(y, 0, f"Max Value:{'':>{pad_max}}{item.max_value:,.2f}"); y += 1
+        stdscr.addstr(y, 0, f"Sale:{'':>{pad_sale}}{item.sale:,.2f}"); y += 1
 
         margin = item.margin_percent
         margin_str = f"{margin:.1f}%" if margin is not None else "N/A"
-        stdscr.addstr(y, 0, f"Margin:{'':>label_width-8}{margin_str}"); y += 2
+        stdscr.addstr(y, 0, f"Margin:{'':>{pad_margin}}{margin_str}"); y += 2
 
-        stdscr.addstr(y, 0, f"Description:{'':>label_width-13}{item.description}")
+        stdscr.addstr(y, 0, f"Description:{'':>{pad_desc}}{item.description}")
         y += 2
 
         draw_footer(stdscr, "e: edit   d: delete   c: configuration   q: back")
