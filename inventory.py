@@ -77,6 +77,20 @@ COLOR_CRITICAL_ENABLED = True
 # Global custom fields
 CUSTOM_FIELDS = []  # [{'name':str, 'label':str, 'type':'text'|'number'|'money'}, ...]
 
+# Input customization - which fields to prompt for when adding an item
+INPUT_FIELDS = ['name', 'quantity', 'cost', 'location', 'description']
+
+AVAILABLE_INPUT_FIELDS = {
+    'name':        {'label': 'Name',        'default': 'NA',  'type': 'text'},
+    'quantity':    {'label': 'Quantity',    'default': '0',   'type': 'number'},
+    'cost':        {'label': 'Cost',        'default': '0.00','type': 'money'},
+    'location':    {'label': 'Location',    'default': 'NA',  'type': 'text'},
+    'description': {'label': 'Description', 'default': 'NA',  'type': 'text'},
+    'min_value':   {'label': 'Min Value',   'default': '0.00','type': 'money'},
+    'max_value':   {'label': 'Max Value',   'default': '0.00','type': 'money'},
+    'sale':        {'label': 'Sale Price',  'default': '0.00','type': 'money'},
+}
+
 # Program display names
 PROGRAM_NAME = "TUI Inventory"
 SUBTITLE = "Track your inventory with ease"
@@ -107,7 +121,7 @@ THEME_COLOR = curses.COLOR_CYAN
 # ──────────────────────────────────────────────────────────────────────────────
 
 def load_config():
-    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, COLUMNS, HISTORY_COLUMNS
+    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS
     if CONFIG_FILE.exists():
         try:
             with CONFIG_FILE.open('r', encoding='utf-8') as f:
@@ -126,6 +140,9 @@ def load_config():
                 saved_history_cols = data.get('history_columns', None)
                 if saved_history_cols:
                     HISTORY_COLUMNS = saved_history_cols
+                saved_input_fields = data.get('input_fields', None)
+                if saved_input_fields:
+                    INPUT_FIELDS = saved_input_fields
         except Exception:
             CUSTOM_FIELDS = []
             THEME_COLOR = curses.COLOR_CYAN
@@ -134,11 +151,11 @@ def load_config():
         THEME_COLOR = curses.COLOR_CYAN
 
 def save_config(include_theme=True):
-    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, COLUMNS, HISTORY_COLUMNS
+    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS
     with CONFIG_FILE.open('w', encoding='utf-8') as f:
         color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
         if include_theme:
-            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'color_critical_enabled': COLOR_CRITICAL_ENABLED, 'columns': COLUMNS, 'history_columns': HISTORY_COLUMNS}, f, indent=2)
+            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'color_critical_enabled': COLOR_CRITICAL_ENABLED, 'columns': COLUMNS, 'history_columns': HISTORY_COLUMNS, 'input_fields': INPUT_FIELDS}, f, indent=2)
         else:
             json.dump({'custom_fields': CUSTOM_FIELDS}, f, indent=2)
 
@@ -638,7 +655,7 @@ def column_config_menu(stdscr):
         
         try:
             stdscr.attron(curses.color_pair(1))
-            stdscr.addstr(0, 0, "Column Configuration".center(min(w, 100)))
+            stdscr.addstr(0, 0, "Inventory Column Configuration".center(min(w, 100)))
             stdscr.attroff(curses.color_pair(1))
         except curses.error:
             pass
@@ -678,7 +695,7 @@ def column_config_menu(stdscr):
         all_columns.sort(key=lambda c: c.get('label') or AVAILABLE_COLUMNS[c['key']]['label'])
         
         try:
-            stdscr.addstr(2, 2, "Columns (Arrows: scroll, Enter: toggle, +/-: width, a: align L/C/R):")
+            stdscr.addstr(2, 2, "Columns (↑↓: navigate, Enter: toggle, +/-: width, a: align L/C/R):")
             stdscr.addstr(3, 0, "─" * min(w, 80))
         except curses.error:
             pass
@@ -792,8 +809,8 @@ def column_config_menu(stdscr):
         
         try:
             stdscr.addstr(h-4, 0, "·" * min(w, 80))
-            stdscr.addstr(h-3, 2, "Enter/Arrows: toggle  +/-: width  a: align  d: default  q: back")
-            stdscr.addstr(h-2, 2, "(max 5 columns, width 3-30)")
+            stdscr.addstr(h-3, 2, "↑↓: navigate  Enter: toggle  +/-: width  a: align  d: default  q: back")
+            stdscr.addstr(h-2, 2, "(width 3-30)")
         except curses.error:
             pass
         
@@ -819,8 +836,10 @@ def column_config_menu(stdscr):
             if col['active']:
                 COLUMNS[:] = [c for c in COLUMNS if c['key'] != col['key']]
             else:
-                if len(COLUMNS) < 5:
-                    COLUMNS.append({'key': col['key'], 'width': col['width'], 'align': col['align']})
+                entry = {'key': col['key'], 'width': col['width'], 'align': col['align']}
+                if col.get('label'):
+                    entry['label'] = col['label']
+                COLUMNS.append(entry)
         elif key in (ord('+'), ord('=')):
             col = all_columns[selected_idx]
             if col['active']:
@@ -905,7 +924,7 @@ def history_column_config_menu(stdscr):
         all_columns.sort(key=lambda c: c.get('label') or AVAILABLE_HISTORY_COLUMNS[c['key']]['label'])
         
         try:
-            stdscr.addstr(2, 2, "Columns (Arrows: scroll, Enter: toggle, +/-: width, a: align L/C/R):")
+            stdscr.addstr(2, 2, "Columns (↑↓: navigate, Enter: toggle, +/-: width, a: align L/C/R):")
             stdscr.addstr(3, 0, "─" * min(w, 80))
         except curses.error:
             pass
@@ -1008,8 +1027,8 @@ def history_column_config_menu(stdscr):
         
         try:
             stdscr.addstr(h-4, 0, "·" * min(w, 80))
-            stdscr.addstr(h-3, 2, "Enter/Arrows: toggle  +/-: width  a: align  d: default  q: back")
-            stdscr.addstr(h-2, 2, "(max 6 columns, width 3-30)")
+            stdscr.addstr(h-3, 2, "↑↓: navigate  Enter: toggle  +/-: width  a: align  d: default  q: back")
+            stdscr.addstr(h-2, 2, "(width 3-30)")
         except curses.error:
             pass
         
@@ -1036,8 +1055,7 @@ def history_column_config_menu(stdscr):
             if col['active']:
                 HISTORY_COLUMNS[:] = [c for c in HISTORY_COLUMNS if c['key'] != col['key']]
             else:
-                if len(HISTORY_COLUMNS) < 6:
-                    HISTORY_COLUMNS.append({'key': col['key'], 'width': col['width'], 'align': col['align']})
+                HISTORY_COLUMNS.append({'key': col['key'], 'width': col['width'], 'align': col['align']})
         elif key in (ord('+'), ord('=')):
             col = all_columns[selected_idx]
             if col['active']:
@@ -1069,6 +1087,115 @@ def history_column_config_menu(stdscr):
     save_config()
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Inventory Input Customization Menu
+# ──────────────────────────────────────────────────────────────────────────────
+
+def input_customization_menu(stdscr):
+    global INPUT_FIELDS, CUSTOM_FIELDS
+    load_config()
+    stdscr.keypad(1)
+
+    for color_name, pair_id in THEME_COLOR_PAIRS.items():
+        curses.init_pair(pair_id, THEME_COLORS[color_name], curses.COLOR_BLACK)
+
+    selected_idx = 0
+
+    while True:
+        stdscr.clear()
+        h, w = stdscr.getmaxyx()
+
+        if h < 15 or w < 50:
+            try:
+                stdscr.addstr(0, 0, "Window too small. Resize and press any key...")
+                stdscr.refresh()
+                stdscr.getch()
+            except curses.error:
+                pass
+            break
+
+        try:
+            stdscr.attron(curses.color_pair(1))
+            stdscr.addstr(0, 0, "Inventory Input Customization".center(min(w, 100)))
+            stdscr.attroff(curses.color_pair(1))
+        except curses.error:
+            pass
+
+        # Build list of all available input fields (built-in + custom)
+        all_fields = []
+        for key in AVAILABLE_INPUT_FIELDS:
+            info = AVAILABLE_INPUT_FIELDS[key]
+            is_active = key in INPUT_FIELDS
+            all_fields.append({'key': key, 'label': info['label'], 'default': info['default'], 'type': info['type'], 'active': is_active, 'is_custom': False})
+        for field in CUSTOM_FIELDS:
+            key = 'custom_' + field['name']
+            is_active = key in INPUT_FIELDS
+            if field.get('type') == 'money':
+                default = '0.00'
+            elif field.get('type') == 'number':
+                default = '0'
+            else:
+                default = 'NA'
+            all_fields.append({'key': key, 'label': field['label'], 'default': default, 'type': field.get('type', 'text'), 'active': is_active, 'is_custom': True})
+
+        try:
+            stdscr.addstr(2, 2, "Fields (Enter: toggle on/off):")
+            stdscr.addstr(3, 0, "─" * min(w, 80))
+        except curses.error:
+            pass
+
+        y = 4
+        for i, field in enumerate(all_fields):
+            marker = '[x]' if field['active'] else '[ ]'
+            if i == selected_idx:
+                prefix = '>'
+            else:
+                prefix = ' '
+            label = field['label']
+            default_val = field['default']
+            try:
+                if i == selected_idx:
+                    stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+                    stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<18} default: {default_val}")
+                    stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+                else:
+                    stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<18} default: {default_val}")
+            except curses.error:
+                pass
+
+        try:
+            stdscr.addstr(h-2, 2, "(↑↓: scroll, Enter: toggle, d: reset defaults)")
+        except curses.error:
+            pass
+
+        try:
+            stdscr.addstr(h-2, 0, "·" * min(w, 80))
+            stdscr.addstr(h-1, 0, f"↑↓: navigate  Enter: toggle  d: defaults  q: back".ljust(w-1))
+        except curses.error:
+            pass
+
+        stdscr.refresh()
+        key = stdscr.getch()
+
+        if key == curses.KEY_RESIZE:
+            continue
+        elif key == curses.KEY_UP:
+            selected_idx = max(0, selected_idx - 1)
+        elif key == curses.KEY_DOWN:
+            selected_idx = min(len(all_fields) - 1, selected_idx + 1)
+        elif key in (curses.KEY_ENTER, 10, 13, ord(' ')):
+            field = all_fields[selected_idx]
+            if field['active']:
+                INPUT_FIELDS = [f for f in INPUT_FIELDS if f != field['key']]
+            else:
+                INPUT_FIELDS.append(field['key'])
+            save_config()
+        elif key == ord('d'):
+            INPUT_FIELDS = list(AVAILABLE_INPUT_FIELDS.keys())
+            save_config()
+        elif key in (ord('q'), ord('b')):
+            break
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Custom Fields Configuration Menu
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1081,7 +1208,7 @@ def config_menu(stdscr, inventory=None):
     for color_name, pair_id in THEME_COLOR_PAIRS.items():
         curses.init_pair(pair_id, THEME_COLORS[color_name], curses.COLOR_BLACK)
 
-    TABS = ["Custom Fields", "Settings", "Display"]
+    TABS = ["Custom Fields", "Theming", "System Settings"]
     current_tab = 0
     current_option = 0
 
@@ -1105,7 +1232,7 @@ def config_menu(stdscr, inventory=None):
 
         try:
             stdscr.attron(curses.color_pair(1))
-            stdscr.addstr(0, 0, (PROGRAM_NAME + " Settings").center(min(w, 100)))
+            stdscr.addstr(0, 0, "Inventory Settings".center(min(w, 100)))
             stdscr.attroff(curses.color_pair(1))
             stdscr.addstr(1, 0, "")
         except curses.error:
@@ -1193,20 +1320,22 @@ def config_menu(stdscr, inventory=None):
         if current_tab == 2:
             y = content_top
             try:
-                prefix0 = ">" if current_option == 0 else " "
-                prefix1 = ">" if current_option == 1 else " "
-                prefix2 = ">" if current_option == 2 else " "
-                prefix3 = ">" if current_option == 3 else " "
-                prefix4 = ">" if current_option == 4 else " "
-                color_crit_status = "On" if COLOR_CRITICAL_ENABLED else "Off"
-                stdscr.addstr(y, 2, f"{prefix0} 1. {'Show stock alerts':<17}: {color_crit_status}")
-                po_status = "On" if PO_ENABLED else "Off"
-                stdscr.addstr(y+1, 2, f"{prefix1} 2. {'PO Number':<17}: {po_status}")
-                mon_status = "On" if MONETIZATION_ENABLED else "Off"
-                stdscr.addstr(y+2, 2, f"{prefix2} 3. {'Monetization':<17}: {mon_status}")
-                stdscr.addstr(y+3, 2, f"{prefix3} 4. Inventory columns")
-                stdscr.addstr(y+4, 2, f"{prefix4} 5. History columns")
-                stdscr.addstr(y+6, 2, "(↑↓ or 1-5: select, Enter toggle)")
+                lines = [
+                    f" 1. {'Show stock alerts':<17}: {'On' if COLOR_CRITICAL_ENABLED else 'Off'}",
+                    f" 2. {'PO Number':<17}: {'On' if PO_ENABLED else 'Off'}",
+                    f" 3. {'Monetization':<17}: {'On' if MONETIZATION_ENABLED else 'Off'}",
+                    f" 4. Inventory Column Configuration",
+                    f" 5. History Column Configuration",
+                    f" 6. Inventory Input Customization",
+                ]
+                for i, line in enumerate(lines):
+                    if i == current_option:
+                        stdscr.attron(curses.color_pair(1))
+                        stdscr.addstr(y + i, 2, ">" + line)
+                        stdscr.attroff(curses.color_pair(1))
+                    else:
+                        stdscr.addstr(y + i, 2, " " + line)
+                stdscr.addstr(y + len(lines) + 1, 2, "(↑↓ or 1-6: select, Enter toggle)")
             except curses.error:
                 pass
 
@@ -1232,9 +1361,9 @@ def config_menu(stdscr, inventory=None):
         elif current_tab == 1 and key == curses.KEY_DOWN:
             current_option = (current_option + 1) % 7
         elif current_tab == 2 and key == curses.KEY_UP:
-            current_option = (current_option - 1) % 5
+            current_option = (current_option - 1) % 6
         elif current_tab == 2 and key == curses.KEY_DOWN:
-            current_option = (current_option + 1) % 5
+            current_option = (current_option + 1) % 6
         elif key in (10, curses.KEY_ENTER, ord(' ')):
             if current_tab == 1:
                 color_names = list(THEME_COLORS.keys())
@@ -1256,6 +1385,8 @@ def config_menu(stdscr, inventory=None):
                     column_config_menu(stdscr)
                 elif current_option == 4:
                     history_column_config_menu(stdscr)
+                elif current_option == 5:
+                    input_customization_menu(stdscr)
         elif key in (ord('q'), ord('b')):
             break
         elif current_tab == 1 and 49 <= key <= 55:
@@ -1299,6 +1430,9 @@ def config_menu(stdscr, inventory=None):
         elif current_tab == 2 and key == ord('5'):
             current_option = 4
             history_column_config_menu(stdscr)
+        elif current_tab == 2 and key == ord('6'):
+            current_option = 5
+            input_customization_menu(stdscr)
         elif current_tab == 0 and key == ord('a'):
                 if len(CUSTOM_FIELDS) >= 5:
                     try:
@@ -1339,11 +1473,12 @@ def config_menu(stdscr, inventory=None):
                     idx = int(cmd) - 1
                     removed_key = CUSTOM_FIELDS[idx]['name']
                     removed_label = CUSTOM_FIELDS[idx]['label']
-                    stdscr.addstr(y+4, 2, f"Delete '{removed_label}'? (y/n): ")
+                    prompt_text = f"Delete '{removed_label}'? This will delete all data collected for this field. (y/n): "
+                    stdscr.addstr(y+4, 2, prompt_text)
                     stdscr.refresh()
                     curses.echo()
                     try:
-                        confirm = stdscr.getstr(y+4, 28, 3).decode('utf-8').strip().lower()
+                        confirm = stdscr.getstr(y+4, 2 + len(prompt_text), 3).decode('utf-8').strip().lower()
                     except:
                         confirm = ""
                     curses.noecho()
@@ -1399,19 +1534,45 @@ def get_input(stdscr, prompt, y, x, max_len=40, default=""):
     return val
 
 def add_item(stdscr, inventory):
+    global INPUT_FIELDS, CUSTOM_FIELDS
+    load_config()
     stdscr.clear()
+    h, w = stdscr.getmaxyx()
     stdscr.addstr(0, 0, "Add New Item (leave name blank to cancel)")
 
-    name = get_input(stdscr, "Name:          ", 2, 0, 40)
-    if not name.strip():
-        stdscr.addstr(12, 0, "Cancelled. Press any key...")
-        stdscr.getch()
-        return
+    defaults = {
+        'name': 'NA', 'quantity': '0', 'cost': '0.00',
+        'location': 'NA', 'description': 'NA',
+        'min_value': '0.00', 'max_value': '0.00', 'sale': '0.00'
+    }
 
-    quantity    = get_input(stdscr, "Quantity:      ", 3, 0, 10, "0")
-    cost        = get_input(stdscr, "Cost ($):      ", 4, 0, 12, "0.00")
-    location    = get_input(stdscr, "Location:      ", 5, 0, 30, "")
-    description = get_input(stdscr, "Description:   ", 6, 0, 60, "")
+    prompts = [
+        ('name',        "Name:          ", 40),
+        ('quantity',    "Quantity:      ", 10),
+        ('cost',        "Cost ($):      ", 12),
+        ('location',    "Location:      ", 30),
+        ('description', "Description:   ", 60),
+        ('min_value',   "Min Value ($): ", 12),
+        ('max_value',   "Max Value ($): ", 12),
+        ('sale',        "Sale Price ($):", 12),
+    ]
+
+    field_values = {}
+    y = 2
+    for key, prompt, max_len in prompts:
+        if key in INPUT_FIELDS:
+            field_values[key] = get_input(stdscr, prompt, y, 0, max_len, defaults[key])
+            y += 1
+            if key == 'name' and not field_values[key].strip():
+                stdscr.addstr(min(y + 1, h - 2), 0, "Cancelled. Press any key...")
+                stdscr.getch()
+                return
+        else:
+            field_values[key] = defaults[key]
+
+    name = field_values['name']
+    quantity = field_values['quantity']
+    cost = field_values['cost']
 
     errors = validate_inputs(name, quantity, cost)
     if errors:
@@ -1424,7 +1585,13 @@ def add_item(stdscr, inventory):
         return
 
     try:
-        new_item = Item(name, int(quantity or "0"), float(cost or "0"), 0.0, 0.0, 0.0, location, description)
+        new_item = Item(
+            name, int(quantity or "0"), float(cost or "0"),
+            float(field_values['min_value'] or "0"),
+            float(field_values['max_value'] or "0"),
+            float(field_values['sale'] or "0"),
+            field_values['location'], field_values['description']
+        )
     except (ValueError, TypeError) as e:
         stdscr.clear()
         stdscr.addstr(2, 0, f"Cannot add item: {e}")
@@ -1434,9 +1601,41 @@ def add_item(stdscr, inventory):
 
     new_item.custom['low_stock_threshold'] = 5
     new_item.custom['critical_stock'] = 3
+
+    for field in CUSTOM_FIELDS:
+        ckey = 'custom_' + field['name']
+        if ckey in INPUT_FIELDS:
+            if y >= h - 4:
+                break
+            label = field['label'] + ": "
+            val = get_input(stdscr, label, y, 0, 30, "")
+            y += 1
+            if field.get('type') == 'number':
+                try:
+                    new_item.custom[field['name']] = float(val) if val else 0
+                except ValueError:
+                    new_item.custom[field['name']] = 0
+            elif field.get('type') == 'money':
+                try:
+                    new_item.custom[field['name']] = float(val) if val else 0.0
+                except ValueError:
+                    new_item.custom[field['name']] = 0.0
+            else:
+                new_item.custom[field['name']] = val if val else 'NA'
+        else:
+            if field.get('type') == 'money':
+                new_item.custom[field['name']] = 0.0
+            elif field.get('type') == 'number':
+                new_item.custom[field['name']] = 0
+            else:
+                new_item.custom[field['name']] = 'NA'
+
     inventory.append(new_item)
     safe_save_inventory(inventory)
-    stdscr.addstr(10, 0, "Item added. Press any key...")
+    try:
+        stdscr.addstr(min(y + 1, h - 2), 0, "Item added. Press any key...")
+    except curses.error:
+        pass
     stdscr.getch()
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -2148,7 +2347,14 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     for idx, col in enumerate(COLUMNS):
         key = col['key']
         if key.startswith('custom_'):
-            label = col.get('label', key)
+            label = col.get('label')
+            if not label:
+                for field in CUSTOM_FIELDS:
+                    if 'custom_' + field['name'] == key:
+                        label = field['label']
+                        break
+            if not label:
+                label = key
         else:
             label = AVAILABLE_COLUMNS[key]['label']
         label = f"{label}({idx + 1})"
