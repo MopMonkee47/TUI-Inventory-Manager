@@ -14,6 +14,11 @@
       "name": "part#",
       "label": "Part#",
       "type": "text"
+    },
+    {
+      "name": "sdfsdfndfjhkshd",
+      "label": "sdfsdfndfjhkshdfjhksjdfhkskklx",
+      "type": "text"
     }
   ],
   "theme_color": "magenta",
@@ -22,6 +27,7 @@
   "po_enabled": false,
   "monetization_enabled": false,
   "color_critical_enabled": true,
+  "delete_confirm_enabled": true,
   "columns": [
     {
       "key": "name",
