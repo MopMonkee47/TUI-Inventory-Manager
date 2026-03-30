@@ -75,6 +75,7 @@ AVAILABLE_HISTORY_COLUMNS = {
 PO_ENABLED = True
 MONETIZATION_ENABLED = True
 COLOR_CRITICAL_ENABLED = True
+DELETE_CONFIRM_ENABLED = True
 
 # Global custom fields
 CUSTOM_FIELDS = []  # [{'name':str, 'label':str, 'type':'text'|'number'|'money'}, ...]
@@ -123,7 +124,7 @@ THEME_COLOR = curses.COLOR_CYAN
 # ──────────────────────────────────────────────────────────────────────────────
 
 def load_config():
-    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS
+    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS
     if CONFIG_FILE.exists():
         try:
             with CONFIG_FILE.open('r', encoding='utf-8') as f:
@@ -136,6 +137,7 @@ def load_config():
                 PO_ENABLED = data.get('po_enabled', True)
                 MONETIZATION_ENABLED = data.get('monetization_enabled', True)
                 COLOR_CRITICAL_ENABLED = data.get('color_critical_enabled', True)
+                DELETE_CONFIRM_ENABLED = data.get('delete_confirm_enabled', True)
                 saved_cols = data.get('columns', None)
                 if saved_cols:
                     COLUMNS = saved_cols
@@ -153,11 +155,11 @@ def load_config():
         THEME_COLOR = curses.COLOR_CYAN
 
 def save_config(include_theme=True):
-    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS
+    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS
     with CONFIG_FILE.open('w', encoding='utf-8') as f:
         color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
         if include_theme:
-            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'color_critical_enabled': COLOR_CRITICAL_ENABLED, 'columns': COLUMNS, 'history_columns': HISTORY_COLUMNS, 'input_fields': INPUT_FIELDS}, f, indent=2)
+            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'color_critical_enabled': COLOR_CRITICAL_ENABLED, 'delete_confirm_enabled': DELETE_CONFIRM_ENABLED, 'columns': COLUMNS, 'history_columns': HISTORY_COLUMNS, 'input_fields': INPUT_FIELDS}, f, indent=2)
         else:
             json.dump({'custom_fields': CUSTOM_FIELDS}, f, indent=2)
 
@@ -1290,7 +1292,7 @@ def about_menu(stdscr):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def config_menu(stdscr, inventory=None):
-    global CUSTOM_FIELDS, LOW_STOCK_THRESHOLD, CRITICAL_STOCK, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED
+    global CUSTOM_FIELDS, LOW_STOCK_THRESHOLD, CRITICAL_STOCK, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED
 
     load_config()
     stdscr.keypad(1)
@@ -1414,9 +1416,10 @@ def config_menu(stdscr, inventory=None):
                     f" 1. {'Show stock alerts':<17}: {'On' if COLOR_CRITICAL_ENABLED else 'Off'}",
                     f" 2. {'PO Number':<17}: {'On' if PO_ENABLED else 'Off'}",
                     f" 3. {'Monetization':<17}: {'On' if MONETIZATION_ENABLED else 'Off'}",
-                    f" 4. Inventory Column Configuration",
-                    f" 5. History Column Configuration",
-                    f" 6. Inventory Input Customization",
+                    f" 4. {'Delete Confirm':<17}: {'On' if DELETE_CONFIRM_ENABLED else 'Off'}",
+                    f" 5. Inventory Column Configuration",
+                    f" 6. History Column Configuration",
+                    f" 7. Inventory Input Customization",
                 ]
                 for i, line in enumerate(lines):
                     if i == current_option:
@@ -1425,7 +1428,7 @@ def config_menu(stdscr, inventory=None):
                         stdscr.attroff(curses.color_pair(1))
                     else:
                         stdscr.addstr(y + i, 2, " " + line)
-                stdscr.addstr(y + len(lines) + 1, 2, "(↑↓ or 1-6: select, Enter toggle)")
+                stdscr.addstr(y + len(lines) + 1, 2, "(↑↓ or 1-7: select, Enter toggle)")
             except curses.error:
                 pass
 
@@ -1451,9 +1454,9 @@ def config_menu(stdscr, inventory=None):
         elif current_tab == 1 and key == curses.KEY_DOWN:
             current_option = (current_option + 1) % 7
         elif current_tab == 2 and key == curses.KEY_UP:
-            current_option = (current_option - 1) % 6
+            current_option = (current_option - 1) % 7
         elif current_tab == 2 and key == curses.KEY_DOWN:
-            current_option = (current_option + 1) % 6
+            current_option = (current_option + 1) % 7
         elif key in (10, curses.KEY_ENTER, ord(' ')):
             if current_tab == 1:
                 color_names = list(THEME_COLORS.keys())
@@ -1472,10 +1475,13 @@ def config_menu(stdscr, inventory=None):
                     MONETIZATION_ENABLED = not MONETIZATION_ENABLED
                     save_config()
                 elif current_option == 3:
-                    column_config_menu(stdscr)
+                    DELETE_CONFIRM_ENABLED = not DELETE_CONFIRM_ENABLED
+                    save_config()
                 elif current_option == 4:
-                    history_column_config_menu(stdscr)
+                    column_config_menu(stdscr)
                 elif current_option == 5:
+                    history_column_config_menu(stdscr)
+                elif current_option == 6:
                     input_customization_menu(stdscr)
         elif key == ord('?'):
             about_menu(stdscr)
@@ -1750,13 +1756,56 @@ def add_item(stdscr, inventory):
             else:
                 new_item.custom[field['name']] = 'NA'
 
-    inventory.append(new_item)
-    safe_save_inventory(inventory)
+    stdscr.clear()
+    stdscr.addstr(0, 0, "Add New Item (leave name blank to cancel)")
+    stdscr.addstr(2, 0, "Confirm add:")
+    cy = 4
     try:
-        stdscr.addstr(min(y + 1, h - 2), 0, "Item added. Press any key...")
+        for key in INPUT_FIELDS:
+            if key == 'name':
+                stdscr.addstr(cy, 0, f"  Name:         {new_item.name}"); cy += 1
+            elif key == 'quantity':
+                stdscr.addstr(cy, 0, f"  Quantity:     {new_item.quantity:,}"); cy += 1
+            elif key == 'cost':
+                stdscr.addstr(cy, 0, f"  Cost:         ${new_item.cost:,.2f}"); cy += 1
+            elif key == 'location':
+                stdscr.addstr(cy, 0, f"  Location:     {new_item.location}"); cy += 1
+            elif key == 'description':
+                stdscr.addstr(cy, 0, f"  Description:  {new_item.description}"); cy += 1
+            elif key == 'min_value':
+                stdscr.addstr(cy, 0, f"  Min Value:    ${new_item.min_value:,.2f}"); cy += 1
+            elif key == 'max_value':
+                stdscr.addstr(cy, 0, f"  Max Value:    ${new_item.max_value:,.2f}"); cy += 1
+            elif key == 'sale':
+                stdscr.addstr(cy, 0, f"  Sale Price:   ${new_item.sale:,.2f}"); cy += 1
+            elif key.startswith('custom_'):
+                cf_name = key[7:]
+                for cf in CUSTOM_FIELDS:
+                    if cf['name'] == cf_name:
+                        cf_val = new_item.custom.get(cf_name, '')
+                        if cf.get('type') == 'money' and isinstance(cf_val, (int, float)):
+                            stdscr.addstr(cy, 0, f"  {cf['label']+':':<16}${cf_val:,.2f}"); cy += 1
+                        elif cf.get('type') == 'number' and isinstance(cf_val, (int, float)):
+                            stdscr.addstr(cy, 0, f"  {cf['label']+':':<16}{cf_val:,}"); cy += 1
+                        elif cf_val:
+                            stdscr.addstr(cy, 0, f"  {cf['label']+':':<16}{cf_val}"); cy += 1
+                        break
     except curses.error:
         pass
-    stdscr.getch()
+    cy += 1
+    try:
+        stdscr.addstr(cy, 0, "Add this item? (y/n)")
+    except curses.error:
+        pass
+    stdscr.refresh()
+    while True:
+        ch = stdscr.getch()
+        if ch in (ord('y'), ord('Y')):
+            inventory.append(new_item)
+            safe_save_inventory(inventory)
+            return
+        elif ch in (ord('n'), ord('N')):
+            return
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Hardened select_field_to_edit
@@ -2321,24 +2370,32 @@ def edit_custom_fields_only(stdscr, inventory, orig_idx):
         pass
 
 def delete_item(stdscr, inventory, orig_idx):
+    global DELETE_CONFIRM_ENABLED
     if not (0 <= orig_idx < len(inventory)):
         return False
     item = inventory[orig_idx]
 
-    stdscr.clear()
-    stdscr.addstr(2, 0, f"Really delete '{item.name}' ? (y/N)")
-    stdscr.refresh()
-    ch = stdscr.getch()
-    if ch in (ord('y'), ord('Y')):
+    if DELETE_CONFIRM_ENABLED:
+        h, w = stdscr.getmaxyx()
+        prompt = f"Delete '{item.name}'? (y/n)"
+        try:
+            stdscr.addnstr(h-1, 0, " " * (w - 1), w - 1)
+            stdscr.addnstr(h-1, 0, prompt, w - 1)
+        except curses.error:
+            pass
+        stdscr.refresh()
+        while True:
+            ch = stdscr.getch()
+            if ch in (ord('y'), ord('Y')):
+                del inventory[orig_idx]
+                safe_save_inventory(inventory)
+                return True
+            elif ch in (ord('n'), ord('N')):
+                return False
+    else:
         del inventory[orig_idx]
         safe_save_inventory(inventory)
-        stdscr.addstr(4, 0, "Deleted. Press any key...")
-        stdscr.getch()
         return True
-    else:
-        stdscr.addstr(4, 0, "Cancelled. Press any key...")
-        stdscr.getch()
-        return False
 
 def view_details(stdscr, inventory, orig_idx):
     if not (0 <= orig_idx < len(inventory)):
@@ -2383,7 +2440,7 @@ def view_details(stdscr, inventory, orig_idx):
         h, w = stdscr.getmaxyx()
         stdscr.addstr(h-2, 0, "·" * min(w, 80))
 
-        stdscr.addstr(h-1, 0, "e:edit   d:delete   c:configuration   Enter:back")
+        stdscr.addstr(h-1, 0, "e: edit   d: delete   c: configuration   q: back")
         stdscr.refresh()
 
         key = stdscr.getch()
@@ -2547,7 +2604,7 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     stdscr.addstr(h-2, 0, "·" * min(w, 80))
 
     stats = f"Items:{total_items}"
-    controls = "q:quit a:add s:search r:sale h:history c:configure ENTER:details"
+    controls = "q:quit a:add s:search d:delete r:sale h:history c:configure ENTER:details"
     footer = f"{stats} | {controls}"
     stdscr.addnstr(h-1, 0, footer, w-1)
 
@@ -2817,6 +2874,12 @@ def main(stdscr):
             orig_idx = original_indices[selected_row_idx]
             record_sale_ui(stdscr, inventory, orig_idx)
             # After sale we continue → next loop iteration will redraw automatically
+
+        elif key == ord('d') and filtered_len > 0:
+            orig_idx = original_indices[selected_row_idx]
+            deleted = delete_item(stdscr, inventory, orig_idx)
+            if deleted:
+                selected_row_idx = max(0, min(selected_row_idx, len(inventory) - 1))
 
         elif key == ord('h'):
             view_sales_history(stdscr)
