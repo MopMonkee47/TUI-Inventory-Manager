@@ -1449,6 +1449,10 @@ def config_menu(stdscr, inventory=None):
             current_option = (current_option - 1) % 7
         elif current_tab == 1 and key == curses.KEY_DOWN:
             current_option = (current_option + 1) % 7
+        elif current_tab == 0 and key == curses.KEY_UP:
+            current_option = max(0, current_option - 1)
+        elif current_tab == 0 and key == curses.KEY_DOWN:
+            current_option = min(len(CUSTOM_FIELDS), current_option + 1)
         elif current_tab == 2 and key == curses.KEY_UP:
             current_option = (current_option - 1) % 7
         elif current_tab == 2 and key == curses.KEY_DOWN:
