@@ -1613,16 +1613,44 @@ def validate_inputs(name, qty_str, cost_str):
         errors.append("Cost must be number")
     return errors
 
-def get_input(stdscr, prompt, y, x, max_len=40, default=""):
+def get_input(stdscr, prompt, y, x, max_len=40, default="", field_type="text"):
     stdscr.addstr(y, x, prompt)
-    if default:
-        stdscr.addstr(y, x + len(prompt), default)
-        stdscr.move(y, x + len(prompt) + len(default))
-    else:
-        stdscr.move(y, x + len(prompt))
-    curses.echo()
-    val = stdscr.getstr(y, x + len(prompt), max_len).decode('utf-8').strip()
-    curses.noecho()
+    prompt_x = x + len(prompt)
+    stdscr.move(y, prompt_x)
+    stdscr.refresh()
+
+    val = ""
+    while True:
+        ch = stdscr.getch()
+        if ch in (10, 13, curses.KEY_ENTER):
+            break
+        elif ch in (8, 127, curses.KEY_BACKSPACE, curses.KEY_DC):
+            if val:
+                val = val[:-1]
+                try:
+                    stdscr.addstr(y, prompt_x + len(val), " ")
+                    stdscr.move(y, prompt_x + len(val))
+                except curses.error:
+                    pass
+                stdscr.refresh()
+        elif 32 <= ch <= 126 and len(val) < max_len:
+            c = chr(ch)
+            if field_type == "number" and c.isdigit():
+                val += c
+                stdscr.addch(y, prompt_x + len(val) - 1, ch)
+                stdscr.refresh()
+            elif field_type == "money" and (c.isdigit() or (c == '.' and '.' not in val)):
+                val += c
+                stdscr.addch(y, prompt_x + len(val) - 1, ch)
+                stdscr.refresh()
+            elif field_type == "text":
+                val += c
+                stdscr.addch(y, prompt_x + len(val) - 1, ch)
+                stdscr.refresh()
+
+    val = val.strip()
+    if not val and default:
+        return default
     return val
 
 def add_item(stdscr, inventory):
@@ -1639,21 +1667,21 @@ def add_item(stdscr, inventory):
     }
 
     prompts = [
-        ('name',        "Name:          ", 40),
-        ('quantity',    "Quantity:      ", 10),
-        ('cost',        "Cost ($):      ", 12),
-        ('location',    "Location:      ", 30),
-        ('description', "Description:   ", 60),
-        ('min_value',   "Min Value ($): ", 12),
-        ('max_value',   "Max Value ($): ", 12),
-        ('sale',        "Sale Price ($):", 12),
+        ('name',        "Name:          ", 40, "text"),
+        ('quantity',    "Quantity:      ", 10, "number"),
+        ('cost',        "Cost ($):      ", 12, "money"),
+        ('location',    "Location:      ", 30, "text"),
+        ('description', "Description:   ", 60, "text"),
+        ('min_value',   "Min Value ($): ", 12, "money"),
+        ('max_value',   "Max Value ($): ", 12, "money"),
+        ('sale',        "Sale Price ($):", 12, "money"),
     ]
 
     field_values = {}
     y = 2
-    for key, prompt, max_len in prompts:
+    for key, prompt, max_len, ftype in prompts:
         if key in INPUT_FIELDS:
-            field_values[key] = get_input(stdscr, prompt, y, 0, max_len, defaults[key])
+            field_values[key] = get_input(stdscr, prompt, y, 0, max_len, defaults[key], ftype)
             y += 1
             if key == 'name' and not field_values[key].strip():
                 stdscr.addstr(min(y + 1, h - 2), 0, "Cancelled. Press any key...")
@@ -1700,7 +1728,7 @@ def add_item(stdscr, inventory):
             if y >= h - 4:
                 break
             label = field['label'] + ": "
-            val = get_input(stdscr, label, y, 0, 30, "")
+            val = get_input(stdscr, label, y, 0, 30, "", field.get('type', 'text'))
             y += 1
             if field.get('type') == 'number':
                 try:
