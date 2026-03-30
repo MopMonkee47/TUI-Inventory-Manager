@@ -2423,8 +2423,8 @@ def view_details(stdscr, inventory, orig_idx):
 
         low_thresh = item.custom.get('low_stock_threshold', 5)
         crit_thresh = item.custom.get('critical_stock', 3)
-        stdscr.addstr(y, 0, f"Low threshold:{low_thresh}"); y += 1
-        stdscr.addstr(y, 0, f"Critical:    {crit_thresh}"); y += 1
+        stdscr.addstr(y, 0, f"Low threshold: {low_thresh}"); y += 1
+        stdscr.addstr(y, 0, f"Critical:      {crit_thresh}"); y += 1
 
         stdscr.addstr(y, 0, f"Min Value:    ${item.min_value:,.2f}"); y += 1
         stdscr.addstr(y, 0, f"Max Value:    ${item.max_value:,.2f}"); y += 1
