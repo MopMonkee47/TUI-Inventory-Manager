@@ -26,6 +26,8 @@ DB_FILE     = SCRIPT_DIR / "inventory.db"
 BACKUP_FILE = SCRIPT_DIR / "inventory.db.bak"
 SALES_LOG   = SCRIPT_DIR / "inventory_sales.log"
 CONFIG_FILE = SCRIPT_DIR / "inventory_config.json"
+ABOUT_FILE  = SCRIPT_DIR / "About"
+ABOUT_DEFAULT_FILE = SCRIPT_DIR / "AboutDefault"
 
 # Display settings
 NAME_W     = 24
@@ -1196,6 +1198,94 @@ def input_customization_menu(stdscr):
             break
 
 # ──────────────────────────────────────────────────────────────────────────────
+# About Menu
+# ──────────────────────────────────────────────────────────────────────────────
+
+def about_menu(stdscr):
+    global PROGRAM_NAME
+    load_config()
+    stdscr.keypad(1)
+
+    for color_name, pair_id in THEME_COLOR_PAIRS.items():
+        curses.init_pair(pair_id, THEME_COLORS[color_name], curses.COLOR_BLACK)
+
+    scroll_offset = 0
+
+    while True:
+        stdscr.clear()
+        h, w = stdscr.getmaxyx()
+
+        if h < 10 or w < 40:
+            try:
+                stdscr.addstr(0, 0, "Window too small. Resize and press any key...")
+                stdscr.refresh()
+                stdscr.getch()
+            except curses.error:
+                pass
+            break
+
+        try:
+            stdscr.attron(curses.color_pair(1))
+            stdscr.addstr(0, 0, f"About {PROGRAM_NAME}".center(min(w, 100)))
+            stdscr.attroff(curses.color_pair(1))
+        except curses.error:
+            pass
+
+        try:
+            stdscr.addstr(1, 0, "─" * min(w, 100))
+        except curses.error:
+            pass
+
+        lines = []
+        try:
+            if ABOUT_FILE.exists():
+                with ABOUT_FILE.open('r', encoding='utf-8') as f:
+                    lines = [line.rstrip('\n') for line in f.readlines()]
+        except Exception:
+            lines = ["Unable to read About file."]
+
+        content_top = 2
+        content_bottom = h - 3
+        visible_lines = content_bottom - content_top
+
+        for i in range(visible_lines):
+            line_idx = scroll_offset + i
+            if line_idx >= len(lines):
+                break
+            try:
+                stdscr.addstr(content_top + i, 2, lines[line_idx][:w-3])
+            except curses.error:
+                pass
+
+        max_scroll = max(0, len(lines) - visible_lines)
+
+        try:
+            stdscr.addstr(h-2, 0, "·" * min(w, 80))
+            controls = "↑↓: scroll  r: reset to default  q: back"
+            stdscr.addstr(h-1, 0, controls.ljust(w-1))
+        except curses.error:
+            pass
+
+        stdscr.refresh()
+        key = stdscr.getch()
+
+        if key == curses.KEY_RESIZE:
+            continue
+        elif key in (curses.KEY_UP, ord('k')):
+            scroll_offset = max(0, scroll_offset - 1)
+        elif key in (curses.KEY_DOWN, ord('j')):
+            scroll_offset = min(max_scroll, scroll_offset + 1)
+        elif key == ord('r'):
+            try:
+                if ABOUT_DEFAULT_FILE.exists():
+                    shutil.copy2(ABOUT_DEFAULT_FILE, ABOUT_FILE)
+                    scroll_offset = 0
+            except Exception:
+                pass
+        elif key in (ord('q'), ord('b')):
+            break
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Custom Fields Configuration Menu
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1341,7 +1431,7 @@ def config_menu(stdscr, inventory=None):
 
         try:
             stdscr.addstr(h-2, 0, "·" * min(w, 80))
-            stdscr.addstr(h-1, 0, f"←/→: tabs  ↑↓: navigate  Enter: select  q: back".ljust(w-1))
+            stdscr.addstr(h-1, 0, f"←/→: tabs  ↑↓: navigate  Enter: select  ?: about  q: back".ljust(w-1))
         except curses.error:
             pass
 
@@ -1387,6 +1477,8 @@ def config_menu(stdscr, inventory=None):
                     history_column_config_menu(stdscr)
                 elif current_option == 5:
                     input_customization_menu(stdscr)
+        elif key == ord('?'):
+            about_menu(stdscr)
         elif key in (ord('q'), ord('b')):
             break
         elif current_tab == 1 and 49 <= key <= 55:
