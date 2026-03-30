@@ -1376,7 +1376,7 @@ def config_menu(stdscr, inventory=None):
 
             y += 1
             try:
-                stdscr.addstr(y, 2, f"[{len(CUSTOM_FIELDS)}/5]  a:add  #:del")
+                stdscr.addstr(y, 2, f"[{len(CUSTOM_FIELDS)}/5]  a:add  #:del  e:edit")
             except curses.error:
                 pass
 
@@ -1560,6 +1560,39 @@ def config_menu(stdscr, inventory=None):
                             stdscr.getch()
                     except curses.error:
                         pass
+        elif current_tab == 0 and key == ord('e'):
+            stdscr.addstr(y+4, 2, "Edit which field? (1-" + str(len(CUSTOM_FIELDS)) + "): ")
+            stdscr.refresh()
+            curses.echo()
+            try:
+                cmd = stdscr.getstr(y+4, 33, 2).decode('utf-8').strip()
+            except:
+                cmd = ""
+            curses.noecho()
+            if cmd.isdigit() and 1 <= int(cmd) <= len(CUSTOM_FIELDS):
+                idx = int(cmd) - 1
+                old_label = CUSTOM_FIELDS[idx]['label']
+                stdscr.clear()
+                try:
+                    stdscr.addstr(2, 2, "Edit Field Label")
+                    stdscr.addstr(3, 2, f"Current label: {old_label}")
+                    new_label = get_input(stdscr, "New label: ", 5, 2, 30, old_label)
+                    if new_label.strip():
+                        CUSTOM_FIELDS[idx]['label'] = new_label.strip()
+                        new_key = new_label.lower().replace(" ", "_")[:15]
+                        old_key = CUSTOM_FIELDS[idx]['name']
+                        CUSTOM_FIELDS[idx]['name'] = new_key
+                        if inventory is not None:
+                            for item in inventory:
+                                if old_key in item.custom:
+                                    item.custom[new_key] = item.custom.pop(old_key)
+                        save_config()
+                        if inventory:
+                            safe_save_inventory(inventory)
+                    stdscr.addstr(8, 2, "Updated. Press any key...")
+                    stdscr.getch()
+                except:
+                    pass
         elif current_tab == 0 and 48 <= key <= 57:
             cmd = chr(key)
             if cmd.isdigit() and 1 <= int(cmd) <= len(CUSTOM_FIELDS):
