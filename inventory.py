@@ -1942,6 +1942,24 @@ def select_field_to_edit(stdscr, item):
         elif key == curses.KEY_ENTER or key in (10, 13):
             if not typed_input:
                 return option_values[selected_idx]
+            if typed_input:
+                choice_str = typed_input.upper()
+                if choice_str in ('0', ''):
+                    return None
+                if choice_str == 'C':
+                    return 'C'
+                if choice_str == 'L':
+                    return 'L'
+                if choice_str == 'R':
+                    return 'R'
+                try:
+                    ch = int(choice_str)
+                    if 1 <= ch <= 9:
+                        return ch
+                    if 10 <= ch < 10 + len(CUSTOM_FIELDS):
+                        return ch
+                except ValueError:
+                    pass
         elif key == 27 or key == ord('q'):
             return None
         elif key in (curses.KEY_BACKSPACE, 127):
@@ -1951,25 +1969,6 @@ def select_field_to_edit(stdscr, item):
             typed_input += chr(key)
         elif key in (ord('L'), ord('l'), ord('C'), ord('c'), ord('R'), ord('r')):
             typed_input = chr(key).upper()
-
-        if typed_input:
-            choice_str = typed_input.upper()
-            if choice_str in ('0', ''):
-                return None
-            if choice_str == 'C':
-                return 'C'
-            if choice_str == 'L':
-                return 'L'
-            if choice_str == 'R':
-                return 'R'
-            try:
-                ch = int(choice_str)
-                if 1 <= ch <= 9:
-                    return ch
-                if 10 <= ch < 10 + len(CUSTOM_FIELDS):
-                    return ch
-            except ValueError:
-                pass
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Hardened edit_item
