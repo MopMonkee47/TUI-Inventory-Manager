@@ -1428,7 +1428,7 @@ def config_menu(stdscr, inventory=None):
                         stdscr.attroff(curses.color_pair(1))
                     else:
                         stdscr.addstr(y + i, 2, " " + line)
-                stdscr.addstr(y + len(lines) + 1, 2, "(↑↓ or 1-7: select, Enter toggle)")
+                stdscr.addstr(y + len(lines) + 1, 2, "(↑↓ or 1-7: select, Enter: toggle)")
             except curses.error:
                 pass
 
