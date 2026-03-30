@@ -127,6 +127,11 @@ def draw_footer(stdscr, controls):
     except curses.error:
         pass
 
+def draw_detail_line(stdscr, y, label, value, label_width):
+    line = f"{label}:{'':>{label_width - len(label)}}{value}"
+    stdscr.addstr(y, 0, line)
+    return y + 1
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Config load/save
 # ──────────────────────────────────────────────────────────────────────────────
@@ -2392,27 +2397,16 @@ def view_details(stdscr, inventory, orig_idx):
         stdscr.clear()
         y = 0
 
-        standard_labels = ["Name:", "Quantity:", "Cost:", "Location:", "Low threshold:", "Critical:", "Min Value:", "Max Value:", "Sale:", "Margin:", "Description:"]
-        all_labels = standard_labels + [f"{f['label']}:" for f in CUSTOM_FIELDS]
+        standard_labels = ["Name", "Quantity", "Cost", "Location", "Low threshold", "Critical", "Min Value", "Max Value", "Sale", "Margin", "Description"]
+        all_labels = standard_labels + [f['label'] for f in CUSTOM_FIELDS]
         label_width = max(len(l) for l in all_labels) + 2
-        pad_name = label_width - 5
-        pad_qty = label_width - 10
-        pad_cost = label_width - 5
-        pad_loc = label_width - 10
-        pad_low = label_width - 16
-        pad_crit = label_width - 10
-        pad_min = label_width - 11
-        pad_max = label_width - 11
-        pad_sale = label_width - 6
-        pad_margin = label_width - 8
-        pad_desc = label_width - 13
 
         stdscr.addstr(y, 0, "Item Details"); y += 2
 
-        stdscr.addstr(y, 0, f"Name:{'':>{pad_name}}{item.name}"); y += 1
-        stdscr.addstr(y, 0, f"Quantity:{'':>{pad_qty}}{item.quantity:,}"); y += 1
-        stdscr.addstr(y, 0, f"Cost:{'':>{pad_cost}}{item.cost:,.2f}"); y += 1
-        stdscr.addstr(y, 0, f"Location:{'':>{pad_loc}}{item.location}"); y += 1
+        y = draw_detail_line(stdscr, y, "Name", item.name, label_width)
+        y = draw_detail_line(stdscr, y, "Quantity", str(item.quantity), label_width)
+        y = draw_detail_line(stdscr, y, "Cost", f"${item.cost:,.2f}", label_width)
+        y = draw_detail_line(stdscr, y, "Location", item.location, label_width)
 
         for field in CUSTOM_FIELDS:
             value = item.custom.get(field['name'], "")
@@ -2421,24 +2415,23 @@ def view_details(stdscr, inventory, orig_idx):
                 disp = f"${value:,.2f}"
             elif field['type'] == 'number' and isinstance(value, (int, float)):
                 disp = f"{value:,}"
-            field_label = field['label']
-            pad = label_width - len(field_label) - 1
-            stdscr.addstr(y, 0, f"{field_label}:{'':>{pad}}{disp}"); y += 1
+            y = draw_detail_line(stdscr, y, field['label'], disp, label_width)
 
         low_thresh = item.custom.get('low_stock_threshold', 5)
         crit_thresh = item.custom.get('critical_stock', 3)
-        stdscr.addstr(y, 0, f"Low threshold:{'':>{pad_low}}{low_thresh}"); y += 1
-        stdscr.addstr(y, 0, f"Critical:{'':>{pad_crit}}{crit_thresh}"); y += 1
+        y = draw_detail_line(stdscr, y, "Low threshold", str(low_thresh), label_width)
+        y = draw_detail_line(stdscr, y, "Critical", str(crit_thresh), label_width)
 
-        stdscr.addstr(y, 0, f"Min Value:{'':>{pad_min}}{item.min_value:,.2f}"); y += 1
-        stdscr.addstr(y, 0, f"Max Value:{'':>{pad_max}}{item.max_value:,.2f}"); y += 1
-        stdscr.addstr(y, 0, f"Sale:{'':>{pad_sale}}{item.sale:,.2f}"); y += 1
+        y = draw_detail_line(stdscr, y, "Min Value", f"${item.min_value:,.2f}", label_width)
+        y = draw_detail_line(stdscr, y, "Max Value", f"${item.max_value:,.2f}", label_width)
+        y = draw_detail_line(stdscr, y, "Sale", f"${item.sale:,.2f}", label_width)
 
         margin = item.margin_percent
         margin_str = f"{margin:.1f}%" if margin is not None else "N/A"
-        stdscr.addstr(y, 0, f"Margin:{'':>{pad_margin}}{margin_str}"); y += 2
+        y = draw_detail_line(stdscr, y, "Margin", margin_str, label_width)
+        y += 1
 
-        stdscr.addstr(y, 0, f"Description:{'':>{pad_desc}}{item.description}")
+        y = draw_detail_line(stdscr, y, "Description", item.description, label_width)
         y += 2
 
         draw_footer(stdscr, "e: edit   d: delete   c: configuration   q: back")
