@@ -2407,10 +2407,10 @@ def view_details(stdscr, inventory, orig_idx):
         y = 0
         stdscr.addstr(y, 0, "Item Details"); y += 2
 
-        stdscr.addstr(y, 0, f"Name:         {item.name}"); y += 1
-        stdscr.addstr(y, 0, f"Quantity:     {item.quantity:,}"); y += 1
-        stdscr.addstr(y, 0, f"Cost:         ${item.cost:,.2f}"); y += 1
-        stdscr.addstr(y, 0, f"Location:     {item.location}"); y += 1
+        stdscr.addstr(y, 0, f"Name:          {item.name}"); y += 1
+        stdscr.addstr(y, 0, f"Quantity:      {item.quantity:,}"); y += 1
+        stdscr.addstr(y, 0, f"Cost:          ${item.cost:,.2f}"); y += 1
+        stdscr.addstr(y, 0, f"Location:      {item.location}"); y += 1
 
         for field in CUSTOM_FIELDS:
             value = item.custom.get(field['name'], "")
@@ -2419,22 +2419,22 @@ def view_details(stdscr, inventory, orig_idx):
                 disp = f"${value:,.2f}"
             elif field['type'] == 'number' and isinstance(value, (int, float)):
                 disp = f"{value:,}"
-            stdscr.addstr(y, 0, f"{field['label']:13} {disp}"); y += 1
+            stdscr.addstr(y, 0, f"{field['label']:14} {disp}"); y += 1
 
         low_thresh = item.custom.get('low_stock_threshold', 5)
         crit_thresh = item.custom.get('critical_stock', 3)
         stdscr.addstr(y, 0, f"Low threshold: {low_thresh}"); y += 1
         stdscr.addstr(y, 0, f"Critical:      {crit_thresh}"); y += 1
 
-        stdscr.addstr(y, 0, f"Min Value:    ${item.min_value:,.2f}"); y += 1
-        stdscr.addstr(y, 0, f"Max Value:    ${item.max_value:,.2f}"); y += 1
-        stdscr.addstr(y, 0, f"Sale:         ${item.sale:,.2f}"); y += 1
+        stdscr.addstr(y, 0, f"Min Value:     ${item.min_value:,.2f}"); y += 1
+        stdscr.addstr(y, 0, f"Max Value:     ${item.max_value:,.2f}"); y += 1
+        stdscr.addstr(y, 0, f"Sale:          ${item.sale:,.2f}"); y += 1
 
         margin = item.margin_percent
         margin_str = f"{margin:.1f}%" if margin is not None else "N/A"
-        stdscr.addstr(y, 0, f"Margin:       {margin_str}"); y += 2
+        stdscr.addstr(y, 0, f"Margin:        {margin_str}"); y += 2
 
-        stdscr.addstr(y, 0, f"Description:  {item.description}")
+        stdscr.addstr(y, 0, f"Description:   {item.description}")
         y += 2
 
         h, w = stdscr.getmaxyx()
