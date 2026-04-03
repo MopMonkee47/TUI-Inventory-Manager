@@ -1787,7 +1787,7 @@ def add_item(stdscr, inventory):
             cf_name = key[7:]
             for field in CUSTOM_FIELDS:
                 if field['name'] == cf_name:
-                    label = field['label'] + ": "
+                    label = (field['label'] + ":").ljust(15)
                     max_len = field.get('max_len', 30)
                     val = get_input(stdscr, label, y, 0, max_len, "", field.get('type', 'text'))
                     y += 1
