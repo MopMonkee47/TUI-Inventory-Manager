@@ -44,6 +44,7 @@ AVAILABLE_COLUMNS = {
     'min_value': {'label': 'Min', 'width': 10, 'align': 'right'},
     'max_value': {'label': 'Max', 'width': 10, 'align': 'right'},
     'sale': {'label': 'Sale', 'width': 12, 'align': 'center'},
+    'timestamp': {'label': 'Time Stamp', 'width': 18, 'align': 'left'},
 }
 
 COLUMNS = [
@@ -78,6 +79,7 @@ COLOR_CRITICAL_ENABLED = True
 DELETE_CONFIRM_ENABLED = True
 HIDE_ZERO_QTY_ENABLED = True
 AUTO_DELETE_ZERO_ENABLED = False
+SALE_ENABLED = True
 
 # Global custom fields
 CUSTOM_FIELDS = []  # [{'name':str, 'label':str, 'type':'text'|'number'|'decimal'|'money'}, ...]
@@ -139,7 +141,7 @@ def draw_detail_line(stdscr, y, label, value, label_width):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def load_config():
-    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS
+    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS, SALE_ENABLED
     if CONFIG_FILE.exists():
         try:
             with CONFIG_FILE.open('r', encoding='utf-8') as f:
@@ -155,6 +157,7 @@ def load_config():
                 DELETE_CONFIRM_ENABLED = data.get('delete_confirm_enabled', True)
                 HIDE_ZERO_QTY_ENABLED = data.get('hide_zero_qty_enabled', True)
                 AUTO_DELETE_ZERO_ENABLED = data.get('auto_delete_zero_enabled', False)
+                SALE_ENABLED = data.get('sale_enabled', True)
                 saved_cols = data.get('columns', None)
                 if saved_cols:
                     COLUMNS = saved_cols
@@ -172,11 +175,11 @@ def load_config():
         THEME_COLOR = curses.COLOR_CYAN
 
 def save_config(include_theme=True):
-    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS
+    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS, SALE_ENABLED
     with CONFIG_FILE.open('w', encoding='utf-8') as f:
         color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
         if include_theme:
-            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'color_critical_enabled': COLOR_CRITICAL_ENABLED, 'delete_confirm_enabled': DELETE_CONFIRM_ENABLED, 'hide_zero_qty_enabled': HIDE_ZERO_QTY_ENABLED, 'auto_delete_zero_enabled': AUTO_DELETE_ZERO_ENABLED, 'columns': COLUMNS, 'history_columns': HISTORY_COLUMNS, 'input_fields': INPUT_FIELDS}, f, indent=2)
+            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'color_critical_enabled': COLOR_CRITICAL_ENABLED, 'delete_confirm_enabled': DELETE_CONFIRM_ENABLED, 'hide_zero_qty_enabled': HIDE_ZERO_QTY_ENABLED, 'auto_delete_zero_enabled': AUTO_DELETE_ZERO_ENABLED, 'sale_enabled': SALE_ENABLED, 'columns': COLUMNS, 'history_columns': HISTORY_COLUMNS, 'input_fields': INPUT_FIELDS}, f, indent=2)
         else:
             json.dump({'custom_fields': CUSTOM_FIELDS}, f, indent=2)
 
@@ -186,7 +189,7 @@ def save_config(include_theme=True):
 
 class Item:
     def __init__(self, name, quantity=0, cost=0.0, min_value=0.0, max_value=0.0,
-                 sale=0.0, location="", description="", **custom):
+                 sale=0.0, location="", description="", timestamp="", **custom):
         self.name = name.strip()
         self.quantity = quantity
         self.cost = cost
@@ -195,6 +198,7 @@ class Item:
         self.sale = sale
         self.location = location.strip()
         self.description = description.strip()
+        self.timestamp = timestamp if timestamp else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.custom = custom or {}
 
     @property
@@ -226,14 +230,14 @@ class Item:
             'name': self.name, 'quantity': self.quantity, 'cost': self.cost,
             'min_value': self.min_value, 'max_value': self.max_value,
             'sale': self.sale, 'location': self.location,
-            'description': self.description
+            'description': self.description, 'timestamp': self.timestamp
         }
         d.update(self.custom)
         return d
 
     @classmethod
     def from_dict(cls, d):
-        known = {'name','quantity','cost','min_value','max_value','sale','location','description'}
+        known = {'name','quantity','cost','min_value','max_value','sale','location','description','timestamp'}
         custom = {}
         for k, v in d.items():
             if k not in known:
@@ -250,6 +254,7 @@ class Item:
             sale=float(d.get('sale', 0.0)),
             location=d.get('location', '').strip(),
             description=d.get('description', '').strip(),
+            timestamp=d.get('timestamp', ''),
             **custom
         )
 
@@ -260,7 +265,7 @@ class Item:
 def get_all_fieldnames(inventory):
     base = [
         'name', 'quantity', 'cost', 'min_value', 'max_value',
-        'sale', 'location', 'description'
+        'sale', 'location', 'description', 'timestamp'
     ]
     custom_keys = set()
     for item in inventory:
@@ -1303,7 +1308,7 @@ def about_menu(stdscr):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def config_menu(stdscr, inventory=None):
-    global CUSTOM_FIELDS, LOW_STOCK_THRESHOLD, CRITICAL_STOCK, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED
+    global CUSTOM_FIELDS, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, SALE_ENABLED
 
     load_config()
     stdscr.keypad(1)
@@ -1430,9 +1435,10 @@ def config_menu(stdscr, inventory=None):
                     f" 4. {'Delete Confirm':<20}: {'On' if DELETE_CONFIRM_ENABLED else 'Off'}",
                     f" 5. {'Hide Zero Qty':<20}: {'On' if HIDE_ZERO_QTY_ENABLED else 'Off'}",
                     f" 6. {'Auto Delete Zero Qty':<20}: {'On' if AUTO_DELETE_ZERO_ENABLED else 'Off'}",
-                    f" 7. Inventory Column Configuration",
-                    f" 8. History Column Configuration",
-                    f" 9. Inventory Input Customization",
+                    f" 7. {'Sale Option':<20}: {'On' if SALE_ENABLED else 'Off'}",
+                    f" 8. Inventory Column Configuration",
+                    f" 9. History Column Configuration",
+                    f"10. Inventory Input Customization",
                 ]
                 for i, line in enumerate(lines):
                     if i == current_option:
@@ -1467,9 +1473,9 @@ def config_menu(stdscr, inventory=None):
         elif current_tab == 0 and key == curses.KEY_DOWN:
             current_option = min(len(CUSTOM_FIELDS), current_option + 1)
         elif current_tab == 2 and key == curses.KEY_UP:
-            current_option = (current_option - 1) % 9
+            current_option = (current_option - 1) % 10
         elif current_tab == 2 and key == curses.KEY_DOWN:
-            current_option = (current_option + 1) % 9
+            current_option = (current_option + 1) % 10
         elif key in (10, curses.KEY_ENTER, ord(' ')):
             if current_tab == 1:
                 color_names = list(THEME_COLORS.keys())
@@ -1497,10 +1503,13 @@ def config_menu(stdscr, inventory=None):
                     AUTO_DELETE_ZERO_ENABLED = not AUTO_DELETE_ZERO_ENABLED
                     save_config()
                 elif current_option == 6:
-                    column_config_menu(stdscr)
+                    SALE_ENABLED = not SALE_ENABLED
+                    save_config()
                 elif current_option == 7:
-                    history_column_config_menu(stdscr)
+                    column_config_menu(stdscr)
                 elif current_option == 8:
+                    history_column_config_menu(stdscr)
+                elif current_option == 9:
                     input_customization_menu(stdscr)
         elif key == ord('?'):
             about_menu(stdscr)
@@ -1562,42 +1571,51 @@ def config_menu(stdscr, inventory=None):
         elif current_tab == 2 and key == ord('9'):
             current_option = 8
             input_customization_menu(stdscr)
+        elif current_tab == 2 and key == ord('0'):
+            current_option = 9
+            SALE_ENABLED = not SALE_ENABLED
+            save_config()
         elif current_tab == 0 and key == ord('a'):
-                if len(CUSTOM_FIELDS) >= 5:
-                    try:
-                        stdscr.addstr(y+4, 2, "Max 5 fields reached. Press any key...")
+            if len(CUSTOM_FIELDS) >= 5:
+                try:
+                    stdscr.addstr(y+4, 2, "Max 5 fields reached. Press any key...")
+                    stdscr.getch()
+                except:
+                    pass
+            else:
+                stdscr.clear()
+                try:
+                    stdscr.addstr(2, 2, "Add Field")
+                    label = get_input(stdscr, "Label: ", 4, 2, 30, "")
+                    if not label.strip():
+                        pass
+                    else:
+                        key = label.lower().replace(" ", "_")[:15]
+                        while True:
+                            typ = get_input(stdscr, "Type [t:text n:number d:decimal m:money]: ", 5, 2, 20, "").lower()
+                            if typ in ('t', 'text'):
+                                typ = 'text'
+                                break
+                            elif typ in ('n', 'number'):
+                                typ = 'number'
+                                break
+                            elif typ in ('d', 'decimal'):
+                                typ = 'decimal'
+                                break
+                            elif typ in ('m', 'money'):
+                                typ = 'money'
+                                break
+                        max_len_str = get_input(stdscr, "Max character length [default 30]: ", 6, 2, 10, "30", field_type="number")
+                        try:
+                            max_len = int(max_len_str) if max_len_str.strip() else 30
+                        except ValueError:
+                            max_len = 30
+                        CUSTOM_FIELDS.append({'name':key, 'label':label, 'type':typ, 'max_len': max_len})
+                        save_config()
+                        stdscr.addstr(8, 2, "Added. Press any key...")
                         stdscr.getch()
-                    except:
-                        pass
-                else:
-                    stdscr.clear()
-                    try:
-                        stdscr.addstr(2, 2, "Add Field")
-                        label = get_input(stdscr, "Label: ", 4, 2, 30, "")
-                        if not label.strip():
-                            pass
-                        else:
-                            key = label.lower().replace(" ", "_")[:15]
-                            while True:
-                                typ = get_input(stdscr, "Type [t:text n:number d:decimal m:money]: ", 5, 2, 20, "").lower()
-                                if typ in ('t', 'text'):
-                                    typ = 'text'
-                                    break
-                                elif typ in ('n', 'number'):
-                                    typ = 'number'
-                                    break
-                                elif typ in ('d', 'decimal'):
-                                    typ = 'decimal'
-                                    break
-                                elif typ in ('m', 'money'):
-                                    typ = 'money'
-                                    break
-                            CUSTOM_FIELDS.append({'name':key, 'label':label, 'type':typ})
-                            save_config()
-                            stdscr.addstr(8, 2, "Added. Press any key...")
-                            stdscr.getch()
-                    except curses.error:
-                        pass
+                except curses.error:
+                    pass
         elif current_tab == 0 and key == ord('e'):
             stdscr.addstr(y+4, 2, "Edit which field? (1-" + str(len(CUSTOM_FIELDS)) + "): ")
             stdscr.refresh()
@@ -1739,29 +1757,48 @@ def add_item(stdscr, inventory):
         'min_value': '0.00', 'max_value': '0.00', 'sale': '0.00'
     }
 
-    prompts = [
-        ('name',        "Name:          ", 40, "text"),
-        ('quantity',    "Quantity:      ", 10, "number"),
-        ('cost',        "Cost ($):      ", 12, "money"),
-        ('location',    "Location:      ", 30, "text"),
-        ('description', "Description:   ", 60, "text"),
-        ('min_value',   "Min Value ($): ", 12, "money"),
-        ('max_value',   "Max Value ($): ", 12, "money"),
-        ('sale',        "Sale Price ($):", 12, "money"),
-    ]
+    builtin_prompts = {
+        'name':        ("Name:          ", 40, "text"),
+        'quantity':    ("Quantity:      ", 10, "number"),
+        'cost':        ("Cost ($):      ", 12, "money"),
+        'location':    ("Location:      ", 30, "text"),
+        'description': ("Description:   ", 60, "text"),
+        'min_value':   ("Min Value ($): ", 12, "money"),
+        'max_value':   ("Max Value ($): ", 12, "money"),
+        'sale':        ("Sale Price ($):", 12, "money"),
+    }
 
     field_values = {}
+    for key in defaults:
+        if key not in INPUT_FIELDS:
+            field_values[key] = defaults[key]
+
     y = 2
-    for key, prompt, max_len, ftype in prompts:
-        if key in INPUT_FIELDS:
+    for key in INPUT_FIELDS:
+        if key in builtin_prompts:
+            prompt, max_len, ftype = builtin_prompts[key]
             field_values[key] = get_input(stdscr, prompt, y, 0, max_len, defaults[key], ftype)
             y += 1
             if key == 'name' and not field_values[key].strip():
                 stdscr.addstr(min(y + 1, h - 2), 0, "Cancelled. Press any key...")
                 stdscr.getch()
                 return
-        else:
-            field_values[key] = defaults[key]
+        elif key.startswith('custom_'):
+            cf_name = key[7:]
+            for field in CUSTOM_FIELDS:
+                if field['name'] == cf_name:
+                    label = field['label'] + ": "
+                    max_len = field.get('max_len', 30)
+                    val = get_input(stdscr, label, y, 0, max_len, "", field.get('type', 'text'))
+                    y += 1
+                    if field.get('type') in ('number', 'money', 'decimal'):
+                        try:
+                            field_values[key] = float(val) if val else 0
+                        except ValueError:
+                            field_values[key] = 0 if field.get('type') == 'number' else 0.0
+                    else:
+                        field_values[key] = val if val else 'NA'
+                    break
 
     name = field_values['name']
     quantity = field_values['quantity']
@@ -1797,19 +1834,8 @@ def add_item(stdscr, inventory):
 
     for field in CUSTOM_FIELDS:
         ckey = 'custom_' + field['name']
-        if ckey in INPUT_FIELDS:
-            if y >= h - 4:
-                break
-            label = field['label'] + ": "
-            val = get_input(stdscr, label, y, 0, 30, "", field.get('type', 'text'))
-            y += 1
-            if field.get('type') in ('number', 'money', 'decimal'):
-                try:
-                    new_item.custom[field['name']] = float(val) if val else 0
-                except ValueError:
-                    new_item.custom[field['name']] = 0 if field.get('type') == 'number' else 0.0
-            else:
-                new_item.custom[field['name']] = val if val else 'NA'
+        if ckey in field_values:
+            new_item.custom[field['name']] = field_values[ckey]
         else:
             if field.get('type') in ('money', 'decimal'):
                 new_item.custom[field['name']] = 0.0
@@ -1824,36 +1850,37 @@ def add_item(stdscr, inventory):
     cy = 4
     try:
         for key in INPUT_FIELDS:
-            if key == 'name':
-                stdscr.addstr(cy, 0, f"  Name:         {new_item.name}"); cy += 1
-            elif key == 'quantity':
-                stdscr.addstr(cy, 0, f"  Quantity:     {new_item.quantity:,}"); cy += 1
-            elif key == 'cost':
-                stdscr.addstr(cy, 0, f"  Cost:         ${new_item.cost:,.2f}"); cy += 1
-            elif key == 'location':
-                stdscr.addstr(cy, 0, f"  Location:     {new_item.location}"); cy += 1
-            elif key == 'description':
-                stdscr.addstr(cy, 0, f"  Description:  {new_item.description}"); cy += 1
-            elif key == 'min_value':
-                stdscr.addstr(cy, 0, f"  Min Value:    ${new_item.min_value:,.2f}"); cy += 1
-            elif key == 'max_value':
-                stdscr.addstr(cy, 0, f"  Max Value:    ${new_item.max_value:,.2f}"); cy += 1
-            elif key == 'sale':
-                stdscr.addstr(cy, 0, f"  Sale Price:   ${new_item.sale:,.2f}"); cy += 1
-            elif key.startswith('custom_'):
+            # Get field value and type info
+            if key.startswith('custom_'):
                 cf_name = key[7:]
                 for cf in CUSTOM_FIELDS:
                     if cf['name'] == cf_name:
-                        cf_val = new_item.custom.get(cf_name, '')
-                        if cf.get('type') == 'money' and isinstance(cf_val, (int, float)):
-                            stdscr.addstr(cy, 0, f"  {cf['label']+':':<16}${cf_val:,.2f}"); cy += 1
-                        elif cf.get('type') == 'decimal' and isinstance(cf_val, (int, float)):
-                            stdscr.addstr(cy, 0, f"  {cf['label']+':':<16}{cf_val:,.2f}"); cy += 1
-                        elif cf.get('type') == 'number' and isinstance(cf_val, (int, float)):
-                            stdscr.addstr(cy, 0, f"  {cf['label']+':':<16}{cf_val:,}"); cy += 1
-                        elif cf_val:
-                            stdscr.addstr(cy, 0, f"  {cf['label']+':':<16}{cf_val}"); cy += 1
+                        label = cf['label']
+                        value = new_item.custom.get(cf_name, '')
+                        ftype = cf.get('type', 'text')
                         break
+                else:
+                    # Custom field not found
+                    label = key
+                    value = ''
+                    ftype = 'text'
+            else:
+                # Standard field
+                label = AVAILABLE_INPUT_FIELDS[key]['label']
+                value = getattr(new_item, key)
+                ftype = AVAILABLE_INPUT_FIELDS[key]['type']
+            
+            # Format value based on type
+            if ftype == 'money' and isinstance(value, (int, float)):
+                formatted_value = f"${value:,.2f}"
+            elif ftype == 'decimal' and isinstance(value, (int, float)):
+                formatted_value = f"{value:,.2f}"
+            elif ftype == 'number' and isinstance(value, (int, float)):
+                formatted_value = f"{value:,}"
+            else:
+                formatted_value = str(value) if value != '' else '(empty)'
+            
+            stdscr.addstr(cy, 0, f"  {label+':':<16}{formatted_value}"); cy += 1
     except curses.error:
         pass
     cy += 1
@@ -1945,6 +1972,7 @@ def select_field_to_edit(stdscr, item):
             stdscr.addnstr(y, 4, f"Min Value:     ${item.min_value:,.2f} (hidden)", w-5); y += 1
             stdscr.addnstr(y, 4, f"Max Value:     ${item.max_value:,.2f} (hidden)", w-5); y += 1
             stdscr.addnstr(y, 4, f"Sale:          ${item.sale:,.2f} (hidden)", w-5); y += 1
+            stdscr.addnstr(y, 4, f"Time Stamp:    {item.timestamp}", w-5); y += 1
         except:
             pass
 
@@ -2106,6 +2134,7 @@ def edit_item(stdscr, inventory, orig_idx):
             name=item.name, quantity=item.quantity, cost=item.cost,
             min_value=item.min_value, max_value=item.max_value, sale=item.sale,
             location=item.location, description=item.description,
+            timestamp=item.timestamp,
             **new_custom
         )
         safe_save_inventory(inventory)
@@ -2136,6 +2165,7 @@ def edit_item(stdscr, inventory, orig_idx):
             name=item.name, quantity=item.quantity, cost=item.cost,
             min_value=item.min_value, max_value=item.max_value, sale=item.sale,
             location=item.location, description=item.description,
+            timestamp=item.timestamp,
             **new_custom
         )
         safe_save_inventory(inventory)
@@ -2165,6 +2195,7 @@ def edit_item(stdscr, inventory, orig_idx):
             name=item.name, quantity=item.quantity, cost=item.cost,
             min_value=item.min_value, max_value=item.max_value, sale=item.sale,
             location=item.location, description=item.description,
+            timestamp=item.timestamp,
             **new_custom
         )
         safe_save_inventory(inventory)
@@ -2202,6 +2233,7 @@ def edit_item(stdscr, inventory, orig_idx):
     new_min       = item.min_value
     new_max       = item.max_value
     new_sale      = item.sale
+    new_timestamp = item.timestamp
 
     y = 2
     max_prompt_w = w - 20
@@ -2329,6 +2361,7 @@ def edit_item(stdscr, inventory, orig_idx):
         name=new_name, quantity=new_qty, cost=new_cost,
         min_value=new_min, max_value=new_max, sale=new_sale,
         location=new_location, description=new_desc,
+        timestamp=new_timestamp,
         **new_custom
     )
 
@@ -2417,6 +2450,7 @@ def edit_custom_fields_only(stdscr, inventory, orig_idx):
         name=item.name, quantity=item.quantity, cost=item.cost,
         min_value=item.min_value, max_value=item.max_value, sale=item.sale,
         location=item.location, description=item.description,
+        timestamp=item.timestamp,
         **new_custom
     )
 
@@ -2466,7 +2500,7 @@ def view_details(stdscr, inventory, orig_idx):
         stdscr.clear()
         y = 0
 
-        standard_labels = ["Name", "Quantity", "Cost", "Location", "Low threshold", "Critical", "Min Value", "Max Value", "Sale", "Margin", "Description"]
+        standard_labels = ["Name", "Quantity", "Cost", "Location", "Low threshold", "Critical", "Min Value", "Max Value", "Sale", "Margin", "Time Stamp", "Description"]
         all_labels = standard_labels + [f['label'] for f in CUSTOM_FIELDS]
         label_width = max(len(l) for l in all_labels) + 2
 
@@ -2500,6 +2534,7 @@ def view_details(stdscr, inventory, orig_idx):
         margin = item.margin_percent
         margin_str = f"{margin:.1f}%" if margin is not None else "N/A"
         y = draw_detail_line(stdscr, y, "Margin", margin_str, label_width)
+        y = draw_detail_line(stdscr, y, "Time Stamp", item.timestamp, label_width)
         y += 1
 
         y = draw_detail_line(stdscr, y, "Description", item.description, label_width)
@@ -2562,6 +2597,8 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
             return item.max_value
         elif sort_key == 'sale':
             return item.sale
+        elif sort_key == 'timestamp':
+            return item.timestamp
         elif sort_key.startswith('custom_'):
             val = item.custom.get(sort_key[7:], '')
             if isinstance(val, (int, float)):
@@ -2666,7 +2703,8 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     total_items = len(filtered)
 
     stats = f"Items:{total_items}"
-    controls = "q:quit a:add e:edit d:delete r:sale h:history c:configure ENTER:details"
+    sale_control = "r:sale " if SALE_ENABLED else ""
+    controls = f"q:quit a:add e:edit d:delete {sale_control}h:history c:configure ENTER:details"
     footer = f"{stats} | {controls}"
     draw_footer(stdscr, footer)
 
@@ -2936,7 +2974,7 @@ def main(stdscr):
                     sort_directions[sort_key] = 1
                 selected_row_idx = 0
 
-        elif key == ord('r') and filtered_len > 0:
+        elif key == ord('r') and filtered_len > 0 and SALE_ENABLED:
             orig_idx = original_indices[selected_row_idx]
             record_sale_ui(stdscr, inventory, orig_idx)
             # After sale we continue → next loop iteration will redraw automatically
