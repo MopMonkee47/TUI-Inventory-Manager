@@ -80,6 +80,7 @@ DELETE_CONFIRM_ENABLED = True
 HIDE_ZERO_QTY_ENABLED = True
 AUTO_DELETE_ZERO_ENABLED = False
 SALE_ENABLED = True
+DATE_FORMAT = "%m/%d/%Y"
 
 # Global custom fields
 CUSTOM_FIELDS = []  # [{'name':str, 'label':str, 'type':'text'|'number'|'decimal'|'money'}, ...]
@@ -141,7 +142,7 @@ def draw_detail_line(stdscr, y, label, value, label_width):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def load_config():
-    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS, SALE_ENABLED
+    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS, SALE_ENABLED, DATE_FORMAT
     if CONFIG_FILE.exists():
         try:
             with CONFIG_FILE.open('r', encoding='utf-8') as f:
@@ -158,6 +159,7 @@ def load_config():
                 HIDE_ZERO_QTY_ENABLED = data.get('hide_zero_qty_enabled', True)
                 AUTO_DELETE_ZERO_ENABLED = data.get('auto_delete_zero_enabled', False)
                 SALE_ENABLED = data.get('sale_enabled', True)
+                DATE_FORMAT = data.get('date_format', "%m/%d/%Y")
                 saved_cols = data.get('columns', None)
                 if saved_cols:
                     COLUMNS = saved_cols
@@ -175,11 +177,11 @@ def load_config():
         THEME_COLOR = curses.COLOR_CYAN
 
 def save_config(include_theme=True):
-    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS, SALE_ENABLED
+    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS, SALE_ENABLED, DATE_FORMAT
     with CONFIG_FILE.open('w', encoding='utf-8') as f:
         color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
         if include_theme:
-            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'color_critical_enabled': COLOR_CRITICAL_ENABLED, 'delete_confirm_enabled': DELETE_CONFIRM_ENABLED, 'hide_zero_qty_enabled': HIDE_ZERO_QTY_ENABLED, 'auto_delete_zero_enabled': AUTO_DELETE_ZERO_ENABLED, 'sale_enabled': SALE_ENABLED, 'columns': COLUMNS, 'history_columns': HISTORY_COLUMNS, 'input_fields': INPUT_FIELDS}, f, indent=2)
+            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'color_critical_enabled': COLOR_CRITICAL_ENABLED, 'delete_confirm_enabled': DELETE_CONFIRM_ENABLED, 'hide_zero_qty_enabled': HIDE_ZERO_QTY_ENABLED, 'auto_delete_zero_enabled': AUTO_DELETE_ZERO_ENABLED, 'sale_enabled': SALE_ENABLED, 'date_format': DATE_FORMAT, 'columns': COLUMNS, 'history_columns': HISTORY_COLUMNS, 'input_fields': INPUT_FIELDS}, f, indent=2)
         else:
             json.dump({'custom_fields': CUSTOM_FIELDS}, f, indent=2)
 
@@ -1308,7 +1310,7 @@ def about_menu(stdscr):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def config_menu(stdscr, inventory=None):
-    global CUSTOM_FIELDS, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, SALE_ENABLED
+    global CUSTOM_FIELDS, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, SALE_ENABLED, DATE_FORMAT
 
     load_config()
     stdscr.keypad(1)
@@ -1436,9 +1438,10 @@ def config_menu(stdscr, inventory=None):
                     f" 5. {'Hide Zero Qty':<20}: {'On' if HIDE_ZERO_QTY_ENABLED else 'Off'}",
                     f" 6. {'Auto Delete Zero Qty':<20}: {'On' if AUTO_DELETE_ZERO_ENABLED else 'Off'}",
                     f" 7. {'Sale Option':<20}: {'On' if SALE_ENABLED else 'Off'}",
-                    f" 8. Inventory Column Configuration",
-                    f" 9. History Column Configuration",
-                    f"10. Inventory Input Customization",
+                    f" 8. {'Date Format':<20}: {'MM/DD/YYYY' if DATE_FORMAT == '%m/%d/%Y' else 'DD/MM/YYYY'}",
+                    f" 9. Inventory Column Configuration",
+                    f"10. History Column Configuration",
+                    f"11. Inventory Input Customization",
                 ]
                 for i, line in enumerate(lines):
                     if i == current_option:
@@ -1447,7 +1450,7 @@ def config_menu(stdscr, inventory=None):
                         stdscr.attroff(curses.color_pair(1))
                     else:
                         stdscr.addstr(y + i, 2, " " + line)
-                stdscr.addstr(y + len(lines) + 1, 2, "(↑↓ or 1-9: select, Enter: toggle)")
+                stdscr.addstr(y + len(lines) + 1, 2, "(↑↓: navigate, Enter: toggle)")
             except curses.error:
                 pass
 
@@ -1473,9 +1476,9 @@ def config_menu(stdscr, inventory=None):
         elif current_tab == 0 and key == curses.KEY_DOWN:
             current_option = min(len(CUSTOM_FIELDS), current_option + 1)
         elif current_tab == 2 and key == curses.KEY_UP:
-            current_option = (current_option - 1) % 10
+            current_option = (current_option - 1) % 11
         elif current_tab == 2 and key == curses.KEY_DOWN:
-            current_option = (current_option + 1) % 10
+            current_option = (current_option + 1) % 11
         elif key in (10, curses.KEY_ENTER, ord(' ')):
             if current_tab == 1:
                 color_names = list(THEME_COLORS.keys())
@@ -1506,10 +1509,13 @@ def config_menu(stdscr, inventory=None):
                     SALE_ENABLED = not SALE_ENABLED
                     save_config()
                 elif current_option == 7:
-                    column_config_menu(stdscr)
+                    DATE_FORMAT = "%d/%m/%Y" if DATE_FORMAT == "%m/%d/%Y" else "%m/%d/%Y"
+                    save_config()
                 elif current_option == 8:
-                    history_column_config_menu(stdscr)
+                    column_config_menu(stdscr)
                 elif current_option == 9:
+                    history_column_config_menu(stdscr)
+                elif current_option == 10:
                     input_customization_menu(stdscr)
         elif key == ord('?'):
             about_menu(stdscr)
@@ -1538,43 +1544,6 @@ def config_menu(stdscr, inventory=None):
                     save_config()
             except:
                 curses.noecho()
-        elif current_tab == 2 and key == ord('1'):
-            current_option = 0
-            COLOR_CRITICAL_ENABLED = not COLOR_CRITICAL_ENABLED
-            save_config()
-        elif current_tab == 2 and key == ord('2'):
-            current_option = 1
-            PO_ENABLED = not PO_ENABLED
-            save_config()
-        elif current_tab == 2 and key == ord('3'):
-            current_option = 2
-            MONETIZATION_ENABLED = not MONETIZATION_ENABLED
-            save_config()
-        elif current_tab == 2 and key == ord('4'):
-            current_option = 3
-            DELETE_CONFIRM_ENABLED = not DELETE_CONFIRM_ENABLED
-            save_config()
-        elif current_tab == 2 and key == ord('5'):
-            current_option = 4
-            HIDE_ZERO_QTY_ENABLED = not HIDE_ZERO_QTY_ENABLED
-            save_config()
-        elif current_tab == 2 and key == ord('6'):
-            current_option = 5
-            AUTO_DELETE_ZERO_ENABLED = not AUTO_DELETE_ZERO_ENABLED
-            save_config()
-        elif current_tab == 2 and key == ord('7'):
-            current_option = 6
-            column_config_menu(stdscr)
-        elif current_tab == 2 and key == ord('8'):
-            current_option = 7
-            history_column_config_menu(stdscr)
-        elif current_tab == 2 and key == ord('9'):
-            current_option = 8
-            input_customization_menu(stdscr)
-        elif current_tab == 2 and key == ord('0'):
-            current_option = 9
-            SALE_ENABLED = not SALE_ENABLED
-            save_config()
         elif current_tab == 0 and key == ord('a'):
             if len(CUSTOM_FIELDS) >= 5:
                 try:
@@ -1592,7 +1561,7 @@ def config_menu(stdscr, inventory=None):
                     else:
                         key = label.lower().replace(" ", "_")[:15]
                         while True:
-                            typ = get_input(stdscr, "Type [t:text n:number d:decimal m:money]: ", 5, 2, 20, "").lower()
+                            typ = get_input(stdscr, "Type [t:text n:number d:decimal m:money x:date]: ", 5, 2, 20, "").lower()
                             if typ in ('t', 'text'):
                                 typ = 'text'
                                 break
@@ -1604,6 +1573,9 @@ def config_menu(stdscr, inventory=None):
                                 break
                             elif typ in ('m', 'money'):
                                 typ = 'money'
+                                break
+                            elif typ in ('x', 'date'):
+                                typ = 'date'
                                 break
                         max_len_str = get_input(stdscr, "Max character length [default 30]: ", 6, 2, 10, "30", field_type="number")
                         try:
@@ -1704,7 +1676,7 @@ def validate_inputs(name, qty_str, cost_str):
         errors.append("Cost must be number")
     return errors
 
-def get_input(stdscr, prompt, y, x, max_len=40, default="", field_type="text"):
+def get_input(stdscr, prompt, y, x, max_len=40, default="", field_type="text", allow_cancel=False):
     stdscr.addstr(y, x, prompt)
     prompt_x = x + len(prompt)
     stdscr.move(y, prompt_x)
@@ -1715,6 +1687,12 @@ def get_input(stdscr, prompt, y, x, max_len=40, default="", field_type="text"):
         ch = stdscr.getch()
         if ch in (10, 13, curses.KEY_ENTER):
             break
+        elif ch == 27:
+            if allow_cancel:
+                return "__CANCEL__"
+        elif ch == curses.KEY_UP:
+            if allow_cancel:
+                return "__GOBACK__"
         elif ch in (8, 127, curses.KEY_BACKSPACE, curses.KEY_DC):
             if val:
                 val = val[:-1]
@@ -1744,12 +1722,98 @@ def get_input(stdscr, prompt, y, x, max_len=40, default="", field_type="text"):
         return default
     return val
 
+def _get_bounded_number(stdscr, prompt, y, x, max_digits, min_val, max_val, allow_cancel=False):
+    label = prompt.ljust(15)
+    stdscr.addstr(y, x, label)
+    prompt_x = x + len(label)
+    stdscr.move(y, prompt_x)
+    stdscr.refresh()
+
+    val = ""
+    while True:
+        ch = stdscr.getch()
+        if ch in (10, 13, curses.KEY_ENTER):
+            break
+        elif ch == 27:
+            if allow_cancel:
+                return "__CANCEL__"
+        elif ch == curses.KEY_UP:
+            if allow_cancel:
+                return "__GOBACK__"
+        elif ch in (8, 127, curses.KEY_BACKSPACE, curses.KEY_DC):
+            if val:
+                val = val[:-1]
+                try:
+                    stdscr.addstr(y, prompt_x + len(val), " ")
+                    stdscr.move(y, prompt_x + len(val))
+                except curses.error:
+                    pass
+                stdscr.refresh()
+        elif 32 <= ch <= 126 and len(val) < max_digits:
+            c = chr(ch)
+            if c.isdigit():
+                test_val = val + c
+                try:
+                    num = int(test_val)
+                    if num <= max_val:
+                        val = test_val
+                        stdscr.addch(y, prompt_x + len(val) - 1, ch)
+                        stdscr.refresh()
+                except ValueError:
+                    pass
+
+    if not val.strip():
+        return str(min_val)
+    num = int(val)
+    if num < min_val:
+        num = min_val
+    return str(num)
+
+def get_date_input(stdscr, prompt, y, x, allow_cancel=False):
+    global DATE_FORMAT
+    if prompt:
+        stdscr.addstr(y, x, prompt)
+        stdscr.refresh()
+
+    is_mdy = DATE_FORMAT == "%m/%d/%Y"
+
+    if is_mdy:
+        month_str = _get_bounded_number(stdscr, "Month (1-12):", y, x, 2, 1, 12, allow_cancel)
+        if month_str in ("__CANCEL__", "__GOBACK__"):
+            return month_str
+        day_str = _get_bounded_number(stdscr, "Day (1-31):", y + 1, x, 2, 1, 31, allow_cancel)
+        if day_str in ("__CANCEL__", "__GOBACK__"):
+            return day_str
+        year_str = get_input(stdscr, "Year (YYYY):   ", y + 2, x, 4, "", "number", allow_cancel)
+    else:
+        day_str = _get_bounded_number(stdscr, "Day (1-31):", y, x, 2, 1, 31, allow_cancel)
+        if day_str in ("__CANCEL__", "__GOBACK__"):
+            return day_str
+        month_str = _get_bounded_number(stdscr, "Month (1-12):", y + 1, x, 2, 1, 12, allow_cancel)
+        if month_str in ("__CANCEL__", "__GOBACK__"):
+            return month_str
+        year_str = get_input(stdscr, "Year (YYYY):   ", y + 2, x, 4, "", "number", allow_cancel)
+
+    if year_str in ("__CANCEL__", "__GOBACK__"):
+        return year_str
+
+    try:
+        month = int(month_str) if month_str.strip() else 1
+        day = int(day_str) if day_str.strip() else 1
+        year = int(year_str) if year_str.strip() else 2026
+        month = max(1, min(12, month))
+        day = max(1, min(31, day))
+        year = max(1900, min(2100, year))
+        return f"{month:02d}/{day:02d}/{year:04d}"
+    except ValueError:
+        return "NA"
+
 def add_item(stdscr, inventory):
     global INPUT_FIELDS, CUSTOM_FIELDS
     load_config()
     stdscr.clear()
     h, w = stdscr.getmaxyx()
-    stdscr.addstr(0, 0, "Add New Item (leave name blank to cancel)")
+    stdscr.addstr(0, 0, "Add New Item (Esc: cancel, Up: go back)")
 
     defaults = {
         'name': 'NA', 'quantity': '0', 'cost': '0.00',
@@ -1773,32 +1837,142 @@ def add_item(stdscr, inventory):
         if key not in INPUT_FIELDS:
             field_values[key] = defaults[key]
 
+    def calc_y_up_to(index):
+        cy = 2
+        for i in range(index):
+            k = INPUT_FIELDS[i]
+            if k in builtin_prompts:
+                cy += 1
+            elif k.startswith('custom_'):
+                for field in CUSTOM_FIELDS:
+                    if field['name'] == k[7:]:
+                        if field.get('type') == 'date':
+                            cy += 4
+                        else:
+                            cy += 1
+                        break
+        return cy
+
     y = 2
-    for key in INPUT_FIELDS:
+    idx = 0
+    while idx < len(INPUT_FIELDS):
+        key = INPUT_FIELDS[idx]
+        y = calc_y_up_to(idx)
         if key in builtin_prompts:
             prompt, max_len, ftype = builtin_prompts[key]
-            field_values[key] = get_input(stdscr, prompt, y, 0, max_len, defaults[key], ftype)
-            y += 1
-            if key == 'name' and not field_values[key].strip():
+            result = get_input(stdscr, prompt, y, 0, max_len, defaults.get(key, ""), ftype, allow_cancel=True)
+            if result == "__CANCEL__":
                 stdscr.addstr(min(y + 1, h - 2), 0, "Cancelled. Press any key...")
+                stdscr.getch()
+                return
+            if result == "__GOBACK__":
+                if idx > 0:
+                    idx -= 1
+                    stdscr.clear()
+                    stdscr.addstr(0, 0, "Add New Item (Esc: cancel, Up: go back)")
+                    stdscr.addstr(1, 0, "Previous fields:")
+                    fy = 2
+                    for i in range(idx):
+                        fk = INPUT_FIELDS[i]
+                        if fk in builtin_prompts:
+                            fp, _, _ = builtin_prompts[fk]
+                            fv = field_values.get(fk, '')
+                            stdscr.addstr(fy, 0, f"  {fp.strip()}{fv}")
+                            fy += 1
+                        elif fk.startswith('custom_'):
+                            for cf in CUSTOM_FIELDS:
+                                if cf['name'] == fk[7:]:
+                                    fv = field_values.get(fk, '')
+                                    stdscr.addstr(fy, 0, f"  {(cf['label'] + ':').ljust(15)}{fv}")
+                                    fy += 1
+                                    break
+                    continue
+                else:
+                    continue
+            field_values[key] = result
+            if key == 'name' and not field_values[key].strip():
+                stdscr.addstr(min(y + 2, h - 2), 0, "Cancelled. Press any key...")
                 stdscr.getch()
                 return
         elif key.startswith('custom_'):
             cf_name = key[7:]
             for field in CUSTOM_FIELDS:
                 if field['name'] == cf_name:
-                    label = (field['label'] + ":").ljust(15)
-                    max_len = field.get('max_len', 30)
-                    val = get_input(stdscr, label, y, 0, max_len, "", field.get('type', 'text'))
-                    y += 1
-                    if field.get('type') in ('number', 'money', 'decimal'):
-                        try:
-                            field_values[key] = float(val) if val else 0
-                        except ValueError:
-                            field_values[key] = 0 if field.get('type') == 'number' else 0.0
+                    ftype = field.get('type', 'text')
+                    if ftype == 'date':
+                        label = (field['label'] + ":").ljust(15)
+                        stdscr.addstr(y, 0, label + "Enter date:")
+                        result = get_date_input(stdscr, "", y + 1, 0, allow_cancel=True)
+                        if result == "__CANCEL__":
+                            stdscr.addstr(min(y + 5, h - 2), 0, "Cancelled. Press any key...")
+                            stdscr.getch()
+                            return
+                        if result == "__GOBACK__":
+                            if idx > 0:
+                                idx -= 1
+                                stdscr.clear()
+                                stdscr.addstr(0, 0, "Add New Item (Esc: cancel, Up: go back)")
+                                stdscr.addstr(1, 0, "Previous fields:")
+                                fy = 2
+                                for i in range(idx):
+                                    fk = INPUT_FIELDS[i]
+                                    if fk in builtin_prompts:
+                                        fp, _, _ = builtin_prompts[fk]
+                                        fv = field_values.get(fk, '')
+                                        stdscr.addstr(fy, 0, f"  {fp.strip()}{fv}")
+                                        fy += 1
+                                    elif fk.startswith('custom_'):
+                                        for cf in CUSTOM_FIELDS:
+                                            if cf['name'] == fk[7:]:
+                                                fv = field_values.get(fk, '')
+                                                stdscr.addstr(fy, 0, f"  {(cf['label'] + ':').ljust(15)}{fv}")
+                                                fy += 1
+                                                break
+                                continue
+                            else:
+                                continue
+                        field_values[key] = result if result else 'NA'
                     else:
-                        field_values[key] = val if val else 'NA'
+                        label = (field['label'] + ":").ljust(15)
+                        max_len = field.get('max_len', 30)
+                        result = get_input(stdscr, label, y, 0, max_len, "", ftype, allow_cancel=True)
+                        if result == "__CANCEL__":
+                            stdscr.addstr(min(y + 2, h - 2), 0, "Cancelled. Press any key...")
+                            stdscr.getch()
+                            return
+                        if result == "__GOBACK__":
+                            if idx > 0:
+                                idx -= 1
+                                stdscr.clear()
+                                stdscr.addstr(0, 0, "Add New Item (Esc: cancel, Up: go back)")
+                                stdscr.addstr(1, 0, "Previous fields:")
+                                fy = 2
+                                for i in range(idx):
+                                    fk = INPUT_FIELDS[i]
+                                    if fk in builtin_prompts:
+                                        fp, _, _ = builtin_prompts[fk]
+                                        fv = field_values.get(fk, '')
+                                        stdscr.addstr(fy, 0, f"  {fp.strip()}{fv}")
+                                        fy += 1
+                                    elif fk.startswith('custom_'):
+                                        for cf in CUSTOM_FIELDS:
+                                            if cf['name'] == fk[7:]:
+                                                fv = field_values.get(fk, '')
+                                                stdscr.addstr(fy, 0, f"  {(cf['label'] + ':').ljust(15)}{fv}")
+                                                fy += 1
+                                                break
+                                continue
+                            else:
+                                continue
+                        if ftype in ('number', 'money', 'decimal'):
+                            try:
+                                field_values[key] = float(result) if result else 0
+                            except ValueError:
+                                field_values[key] = 0 if ftype == 'number' else 0.0
+                        else:
+                            field_values[key] = result if result else 'NA'
                     break
+        idx += 1
 
     name = field_values['name']
     quantity = field_values['quantity']
@@ -2105,12 +2279,17 @@ def edit_item(stdscr, inventory, orig_idx):
         curr_str = f"{curr:.2f}" if isinstance(curr, (int, float)) else str(curr)
         prompt = f"{field['label']} [{curr_str[:max_prompt_w - len(field['label'])-5]}]: "
 
-        try:
-            val = get_input(stdscr, prompt, 3, 0,
-                            min(40, max_prompt_w - len(prompt) + 5),
-                            curr_str)
-        except curses.error:
-            val = curr_str
+        if field['type'] == 'date':
+            stdscr.addstr(3, 0, f"Edit {field['label']}")
+            stdscr.addstr(4, 0, f"Current: {curr_str}")
+            val = get_date_input(stdscr, "", 5, 0)
+        else:
+            try:
+                val = get_input(stdscr, prompt, 3, 0,
+                                min(40, max_prompt_w - len(prompt) + 5),
+                                curr_str)
+            except curses.error:
+                val = curr_str
 
         if val != curr_str:
             if field['type'] in ('number', 'money', 'decimal'):
@@ -2316,13 +2495,18 @@ def edit_item(stdscr, inventory, orig_idx):
             curr_str = f"{curr:.2f}" if isinstance(curr, (int,float)) else str(curr)
             prompt = f"{field['label']} [{curr_str[:max_prompt_w - len(field['label']) - 5]}]: "
 
-            val = ""
-            try:
-                val = get_input(stdscr, prompt, y, 0,
-                                min(40, max_prompt_w - len(prompt) + 5),
-                                curr_str)
-            except curses.error:
-                pass
+            if field['type'] == 'date':
+                stdscr.addstr(y, 0, f"Edit {field['label']}")
+                val = get_date_input(stdscr, "", y + 1, 0)
+                y += 4
+            else:
+                val = ""
+                try:
+                    val = get_input(stdscr, prompt, y, 0,
+                                    min(40, max_prompt_w - len(prompt) + 5),
+                                    curr_str)
+                except curses.error:
+                    pass
 
             if val != curr_str:
                 if field['type'] in ('number', 'money', 'decimal'):
@@ -2341,7 +2525,8 @@ def edit_item(stdscr, inventory, orig_idx):
                 else:
                     new_custom[field['name']] = val
 
-            y += 2
+            if field['type'] != 'date':
+                y += 2
 
     # Final validation & save
     errors = validate_inputs(new_name, str(new_qty), str(new_cost))
@@ -2419,12 +2604,17 @@ def edit_custom_fields_only(stdscr, inventory, orig_idx):
         curr_str = f"{curr:.2f}" if isinstance(curr, (int,float)) else str(curr)
         prompt = f"{field['label']} [{curr_str[:max_prompt_w - len(field['label'])-5]}]: "
 
-        try:
-            val = get_input(stdscr, prompt, y, 0,
-                            min(40, max_prompt_w - len(prompt) + 5),
-                            curr_str)
-        except curses.error:
-            val = curr_str
+        if field['type'] == 'date':
+            stdscr.addstr(y, 0, f"Edit {field['label']}")
+            val = get_date_input(stdscr, "", y + 1, 0)
+            y += 4
+        else:
+            try:
+                val = get_input(stdscr, prompt, y, 0,
+                                min(40, max_prompt_w - len(prompt) + 5),
+                                curr_str)
+            except curses.error:
+                val = curr_str
 
         if val != curr_str:
             if field['type'] in ('number', 'money', 'decimal'):
