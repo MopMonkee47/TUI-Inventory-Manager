@@ -1174,9 +1174,9 @@ def input_customization_menu(stdscr):
         for i, field in enumerate(all_fields):
             if field['active']:
                 order = INPUT_FIELDS.index(field['key']) + 1
-                marker = f'[{order}]'
+                marker = f'[{order:>2}]'
             else:
-                marker = '[ ]'
+                marker = '[  ]'
             if i == selected_idx:
                 prefix = '>'
             else:
