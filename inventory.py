@@ -1601,7 +1601,8 @@ def config_menu(stdscr, inventory=None):
                                 max_len = 30
                             CUSTOM_FIELDS.append({'name':key, 'label':label, 'type':typ, 'max_len': max_len})
                         save_config()
-                        stdscr.addstr(8, 2, "Added. Press any key...")
+                        msg_y = 16 if typ == 'list' else 8
+                        stdscr.addstr(msg_y, 2, "Added. Press any key...")
                         stdscr.getch()
                 except curses.error:
                     pass
