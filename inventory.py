@@ -90,7 +90,7 @@ DATE_FORMAT = "%m/%d/%Y"
 CUSTOM_FIELDS = []  # [{'name':str, 'label':str, 'type':'text'|'number'|'decimal'|'money'}, ...]
 
 # Input customization - which fields to prompt for when adding an item
-INPUT_FIELDS = ['name', 'quantity', 'cost', 'location', 'description']
+INPUT_FIELDS = ['name', 'quantity', 'description', 'location', 'cost']
 
 AVAILABLE_INPUT_FIELDS = {
     'name':        {'label': 'Name',        'default': 'NA',  'type': 'text'},
@@ -762,10 +762,10 @@ def column_config_menu(stdscr):
                 try:
                     if i == selected_idx:
                         stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
-                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12}  w:{width}  a:{align[0]}")
+                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12}  w:{width:>3}  a:{align[0]}")
                         stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
                     else:
-                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12}  w:{width}  a:{align[0]}")
+                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12}  w:{width:>3}  a:{align[0]}")
                 except curses.error:
                     pass
             else:
@@ -991,10 +991,10 @@ def history_column_config_menu(stdscr):
                 try:
                     if i == selected_idx:
                         stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
-                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12}  w:{width}  a:{align[0]}")
+                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12}  w:{width:>3}  a:{align[0]}")
                         stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
                     else:
-                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12}  w:{width}  a:{align[0]}")
+                        stdscr.addstr(y + i, 2, f"{prefix} {marker} {label:<12}  w:{width:>3}  a:{align[0]}")
                 except curses.error:
                     pass
             else:
@@ -1237,7 +1237,7 @@ def input_customization_menu(stdscr):
                 INPUT_FIELDS.append(field['key'])
             save_config()
         elif key == ord('d'):
-            INPUT_FIELDS = list(AVAILABLE_INPUT_FIELDS.keys())
+            INPUT_FIELDS = ['name', 'quantity', 'description', 'location', 'cost']
             save_config()
         elif key in (ord('q'), ord('b')):
             break
@@ -1677,6 +1677,8 @@ def config_menu(stdscr, inventory=None):
                     curses.noecho()
                     if confirm == 'y':
                         CUSTOM_FIELDS.pop(idx)
+                        INPUT_FIELDS = [f for f in INPUT_FIELDS if f != f"custom_{removed_key}"]
+                        COLUMNS = [c for c in COLUMNS if c['key'] != f"custom_{removed_key}"]
                         save_config()
                         if inventory is not None:
                             for item in inventory:
@@ -2060,7 +2062,11 @@ def add_item(stdscr, inventory):
             float(field_values['min_value'] or "0"),
             float(field_values['max_value'] or "0"),
             float(field_values['sale'] or "0"),
-            field_values['location'], field_values['description']
+            field_values['location'], field_values['description'],
+            date=field_values.get('date', ''),
+            part_number=field_values.get('part_number', ''),
+            upc=int(field_values['upc']) if field_values.get('upc', '').strip() else 0,
+            po=field_values.get('po', '')
         )
     except (ValueError, TypeError) as e:
         stdscr.clear()
@@ -2115,6 +2121,8 @@ def add_item(stdscr, inventory):
                 formatted_value = f"{value:,.2f}"
             elif ftype == 'number' and isinstance(value, (int, float)):
                 formatted_value = f"{value:,}"
+            elif ftype == 'date':
+                formatted_value = str(value) if value else '(empty)'
             else:
                 formatted_value = str(value) if value != '' else '(empty)'
             
