@@ -1552,6 +1552,18 @@ def config_menu(stdscr, inventory=None):
                     save_config()
             except Exception as e:
                 pass
+        elif current_tab == 1 and key == ord('r'):
+            try:
+                PROGRAM_NAME = "TUI Inventory"
+                SUBTITLE = "Track your inventory with ease"
+                THEME_COLOR = THEME_COLORS['cyan']
+                curses.init_pair(1, THEME_COLOR, -1)
+                save_config()
+                stdscr.addstr(y+12, 2, "Defaults restored. Press any key...".ljust(w-3))
+                stdscr.refresh()
+                stdscr.getch()
+            except:
+                pass
         elif current_tab == 1 and key == ord('n'):
             try:
                 stdscr.addstr(y+12, 2, "Enter new program name: ".ljust(w-3))
