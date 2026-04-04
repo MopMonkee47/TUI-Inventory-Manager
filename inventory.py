@@ -43,7 +43,7 @@ AVAILABLE_COLUMNS = {
     'description': {'label': 'Description', 'width': 20, 'align': 'left'},
     'min_value': {'label': 'Min', 'width': 10, 'align': 'right'},
     'max_value': {'label': 'Max', 'width': 10, 'align': 'right'},
-    'sale': {'label': 'Sale', 'width': 12, 'align': 'center'},
+    'sale': {'label': 'Sale Price', 'width': 12, 'align': 'center'},
     'timestamp': {'label': 'Time Stamp', 'width': 18, 'align': 'left'},
 }
 
