@@ -45,6 +45,10 @@ AVAILABLE_COLUMNS = {
     'max_value': {'label': 'Max', 'width': 10, 'align': 'right'},
     'sale': {'label': 'Sale Price', 'width': 12, 'align': 'center'},
     'timestamp': {'label': 'Time Stamp', 'width': 18, 'align': 'left'},
+    'part_number': {'label': 'Part#', 'width': 14, 'align': 'left'},
+    'upc': {'label': 'UPC', 'width': 14, 'align': 'left'},
+    'po': {'label': 'PO', 'width': 14, 'align': 'left'},
+    'date': {'label': 'Date', 'width': 12, 'align': 'left'},
 }
 
 COLUMNS = [
@@ -97,6 +101,10 @@ AVAILABLE_INPUT_FIELDS = {
     'min_value':   {'label': 'Min Value',   'default': '0.00','type': 'money'},
     'max_value':   {'label': 'Max Value',   'default': '0.00','type': 'money'},
     'sale':        {'label': 'Sale Price',  'default': '0.00','type': 'money'},
+    'part_number': {'label': 'Part#',       'default': 'NA',  'type': 'text'},
+    'upc':         {'label': 'UPC',         'default': '0',   'type': 'number'},
+    'po':          {'label': 'PO',          'default': 'NA',  'type': 'text'},
+    'date':        {'label': 'Date',        'default': 'NA',  'type': 'date'},
 }
 
 # Program display names
@@ -191,7 +199,8 @@ def save_config(include_theme=True):
 
 class Item:
     def __init__(self, name, quantity=0, cost=0.0, min_value=0.0, max_value=0.0,
-                 sale=0.0, location="", description="", timestamp="", **custom):
+                 sale=0.0, location="", description="", timestamp="",
+                 part_number="", upc=0, po="", date="", **custom):
         self.name = name.strip()
         self.quantity = quantity
         self.cost = cost
@@ -201,6 +210,10 @@ class Item:
         self.location = location.strip()
         self.description = description.strip()
         self.timestamp = timestamp if timestamp else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.part_number = part_number.strip()
+        self.upc = upc
+        self.po = po.strip()
+        self.date = date.strip()
         self.custom = custom or {}
 
     @property
@@ -232,14 +245,16 @@ class Item:
             'name': self.name, 'quantity': self.quantity, 'cost': self.cost,
             'min_value': self.min_value, 'max_value': self.max_value,
             'sale': self.sale, 'location': self.location,
-            'description': self.description, 'timestamp': self.timestamp
+            'description': self.description, 'timestamp': self.timestamp,
+            'part_number': self.part_number, 'upc': self.upc, 'po': self.po,
+            'date': self.date
         }
         d.update(self.custom)
         return d
 
     @classmethod
     def from_dict(cls, d):
-        known = {'name','quantity','cost','min_value','max_value','sale','location','description','timestamp'}
+        known = {'name','quantity','cost','min_value','max_value','sale','location','description','timestamp','part_number','upc','po','date'}
         custom = {}
         for k, v in d.items():
             if k not in known:
@@ -257,6 +272,10 @@ class Item:
             location=d.get('location', '').strip(),
             description=d.get('description', '').strip(),
             timestamp=d.get('timestamp', ''),
+            part_number=d.get('part_number', '').strip(),
+            upc=int(d.get('upc', 0)) if d.get('upc') else 0,
+            po=d.get('po', '').strip(),
+            date=d.get('date', '').strip(),
             **custom
         )
 
@@ -267,7 +286,8 @@ class Item:
 def get_all_fieldnames(inventory):
     base = [
         'name', 'quantity', 'cost', 'min_value', 'max_value',
-        'sale', 'location', 'description', 'timestamp'
+        'sale', 'location', 'description', 'timestamp',
+        'part_number', 'upc', 'po', 'date'
     ]
     custom_keys = set()
     for item in inventory:
@@ -2131,14 +2151,18 @@ def select_field_to_edit(stdscr, item):
         "7.  Max Value (hidden)",
         "8.  Sale Price (hidden)",
         "9.  All fields",
+        "10. Part#",
+        "11. UPC",
+        "12. PO",
+        "13. Date",
     ]
     for i, field in enumerate(CUSTOM_FIELDS):
-        options.append(f"{10 + i}. {field['label']} (custom)")
+        options.append(f"{14 + i}. {field['label']} (custom)")
     options.append("L.  Low stock threshold")
     options.append("R.  Critical stock threshold")
     options.append("0.  Cancel")
 
-    option_values = list(range(1, 10)) + list(range(10, 10 + len(CUSTOM_FIELDS))) + ['L', 'R', 'C', None]
+    option_values = list(range(1, 14)) + list(range(14, 14 + len(CUSTOM_FIELDS))) + ['L', 'R', 'C', None]
     
     selected_idx = 0
     typed_input = ""
@@ -2303,9 +2327,130 @@ def edit_item(stdscr, inventory, orig_idx):
     if choice is None:
         return
 
-    # Individual custom field edit (choices 10, 11, 12, ...)
-    if isinstance(choice, int) and 10 <= choice < 10 + len(CUSTOM_FIELDS):
-        field_idx = choice - 10
+    if choice == 10:
+        stdscr.clear()
+        h, w = stdscr.getmaxyx()
+        try:
+            stdscr.addstr(0, 0, f"Edit Part# – {item.name[:w-30]}")
+        except:
+            pass
+        try:
+            val = get_input(stdscr, f"Part# [{item.part_number}]: ", 2, 0, 40, "")
+        except curses.error:
+            val = item.part_number
+        if val.strip():
+            item.part_number = val.strip()
+            inventory[orig_idx] = Item(
+                name=item.name, quantity=item.quantity, cost=item.cost,
+                min_value=item.min_value, max_value=item.max_value, sale=item.sale,
+                location=item.location, description=item.description,
+                timestamp=item.timestamp, part_number=item.part_number, upc=item.upc,
+                **item.custom
+            )
+            safe_save_inventory(inventory)
+        try:
+            stdscr.addstr(4, 0, "Part# updated. Press any key...")
+            stdscr.refresh()
+            stdscr.getch()
+        except:
+            pass
+        return
+
+    if choice == 11:
+        stdscr.clear()
+        h, w = stdscr.getmaxyx()
+        try:
+            stdscr.addstr(0, 0, f"Edit UPC – {item.name[:w-30]}")
+        except:
+            pass
+        try:
+            val = get_input(stdscr, f"UPC [{item.upc}]: ", 2, 0, 20, "", field_type="number")
+        except curses.error:
+            val = str(item.upc)
+        try:
+            item.upc = int(val) if val.strip() else 0
+        except ValueError:
+            item.upc = 0
+        inventory[orig_idx] = Item(
+            name=item.name, quantity=item.quantity, cost=item.cost,
+            min_value=item.min_value, max_value=item.max_value, sale=item.sale,
+            location=item.location, description=item.description,
+            timestamp=item.timestamp, part_number=item.part_number, upc=item.upc,
+            **item.custom
+        )
+        safe_save_inventory(inventory)
+        try:
+            stdscr.addstr(4, 0, "UPC updated. Press any key...")
+            stdscr.refresh()
+            stdscr.getch()
+        except:
+            pass
+        return
+
+    if choice == 12:
+        stdscr.clear()
+        h, w = stdscr.getmaxyx()
+        try:
+            stdscr.addstr(0, 0, f"Edit PO – {item.name[:w-30]}")
+        except:
+            pass
+        try:
+            val = get_input(stdscr, f"PO [{item.po}]: ", 2, 0, 40, "")
+        except curses.error:
+            val = item.po
+        if val.strip():
+            item.po = val.strip()
+            inventory[orig_idx] = Item(
+                name=item.name, quantity=item.quantity, cost=item.cost,
+                min_value=item.min_value, max_value=item.max_value, sale=item.sale,
+                location=item.location, description=item.description,
+                timestamp=item.timestamp, part_number=item.part_number, upc=item.upc,
+                po=item.po,
+                **item.custom
+            )
+            safe_save_inventory(inventory)
+        try:
+            stdscr.addstr(4, 0, "PO updated. Press any key...")
+            stdscr.refresh()
+            stdscr.getch()
+        except:
+            pass
+        return
+
+    if choice == 13:
+        stdscr.clear()
+        h, w = stdscr.getmaxyx()
+        try:
+            stdscr.addstr(0, 0, f"Edit Date – {item.name[:w-30]}")
+        except:
+            pass
+        try:
+            stdscr.addstr(2, 0, f"Current: {item.date}")
+        except:
+            pass
+        val = get_date_input(stdscr, "", 4, 0)
+        if val and val not in ("__CANCEL__", "__GOBACK__"):
+            item.date = val
+            inventory[orig_idx] = Item(
+                name=item.name, quantity=item.quantity, cost=item.cost,
+                min_value=item.min_value, max_value=item.max_value, sale=item.sale,
+                location=item.location, description=item.description,
+                timestamp=item.timestamp, part_number=item.part_number, upc=item.upc,
+                po=item.po, date=item.date,
+                **item.custom
+            )
+            safe_save_inventory(inventory)
+        try:
+            stdscr.addstr(8, 0, "Date updated. Press any key...")
+            stdscr.refresh()
+            stdscr.getch()
+        except:
+            pass
+        return
+
+    # Individual custom field edit (choices 14, 15, 16, ...)
+    if isinstance(choice, int) and 14 <= choice < 14 + len(CUSTOM_FIELDS):
+        field_idx = choice - 14
         field = CUSTOM_FIELDS[field_idx]
         new_custom = item.custom.copy()
 
@@ -2379,7 +2524,8 @@ def edit_item(stdscr, inventory, orig_idx):
             name=item.name, quantity=item.quantity, cost=item.cost,
             min_value=item.min_value, max_value=item.max_value, sale=item.sale,
             location=item.location, description=item.description,
-            timestamp=item.timestamp,
+            timestamp=item.timestamp, part_number=item.part_number, upc=item.upc,
+            po=item.po,
             **new_custom
         )
         safe_save_inventory(inventory)
@@ -2479,6 +2625,10 @@ def edit_item(stdscr, inventory, orig_idx):
     new_max       = item.max_value
     new_sale      = item.sale
     new_timestamp = item.timestamp
+    new_part_number = item.part_number
+    new_upc       = item.upc
+    new_po        = item.po
+    new_date      = item.date
 
     y = 2
     max_prompt_w = w - 20
@@ -2532,6 +2682,28 @@ def edit_item(stdscr, inventory, orig_idx):
         try: new_sale = float(new_sale_str)
         except: pass
         y += 1
+
+    if choice in (10, 9):
+        new_part_number = safe_input("Part#", item.part_number, y, 40)
+        y += 1
+
+    if choice in (11, 9):
+        new_upc_str = safe_input("UPC", str(item.upc), y, 20)
+        try: new_upc = int(new_upc_str)
+        except: pass
+        y += 1
+
+    if choice in (12, 9):
+        new_po = safe_input("PO", item.po, y, 40)
+        y += 1
+
+    if choice in (13, 9):
+        stdscr.addstr(y, 0, f"Edit Date")
+        stdscr.addstr(y + 1, 0, f"Current: {new_date}")
+        val = get_date_input(stdscr, "", y + 2, 0)
+        if val and val not in ("__CANCEL__", "__GOBACK__"):
+            new_date = val
+        y += 5
 
     # Custom fields section
     new_custom = item.custom.copy()
@@ -2636,6 +2808,7 @@ def edit_item(stdscr, inventory, orig_idx):
         min_value=new_min, max_value=new_max, sale=new_sale,
         location=new_location, description=new_desc,
         timestamp=new_timestamp,
+        part_number=new_part_number, upc=new_upc, po=new_po, date=new_date,
         **new_custom
     )
 
@@ -2802,7 +2975,7 @@ def view_details(stdscr, inventory, orig_idx):
         stdscr.clear()
         y = 0
 
-        standard_labels = ["Name", "Quantity", "Cost", "Location", "Low threshold", "Critical", "Min Value", "Max Value", "Sale", "Margin", "Time Stamp", "Description"]
+        standard_labels = ["Name", "Quantity", "Cost", "Location", "Part#", "UPC", "PO", "Date", "Low threshold", "Critical", "Min Value", "Max Value", "Sale", "Margin", "Time Stamp", "Description"]
         all_labels = standard_labels + [f['label'] for f in CUSTOM_FIELDS]
         label_width = max(len(l) for l in all_labels) + 2
 
@@ -2812,6 +2985,10 @@ def view_details(stdscr, inventory, orig_idx):
         y = draw_detail_line(stdscr, y, "Quantity", str(item.quantity), label_width)
         y = draw_detail_line(stdscr, y, "Cost", f"${item.cost:,.2f}", label_width)
         y = draw_detail_line(stdscr, y, "Location", item.location, label_width)
+        y = draw_detail_line(stdscr, y, "Part#", item.part_number, label_width)
+        y = draw_detail_line(stdscr, y, "UPC", str(item.upc), label_width)
+        y = draw_detail_line(stdscr, y, "PO", item.po, label_width)
+        y = draw_detail_line(stdscr, y, "Date", item.date, label_width)
 
         for field in CUSTOM_FIELDS:
             value = item.custom.get(field['name'], "")
@@ -2878,7 +3055,7 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     h, w = stdscr.getmaxyx()
 
     term = search_term.lower()
-    filtered = [item for item in inventory if (not HIDE_ZERO_QTY_ENABLED or item.quantity > 0) and (term in item.name.lower() or term in item.description.lower() or term in item.location.lower())]
+    filtered = [item for item in inventory if (not HIDE_ZERO_QTY_ENABLED or item.quantity > 0) and (term in item.name.lower() or term in item.description.lower() or term in item.location.lower() or term in item.part_number.lower())]
 
     direction = sort_directions.get(sort_key, 1)
 
@@ -2901,6 +3078,14 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
             return item.sale
         elif sort_key == 'timestamp':
             return item.timestamp
+        elif sort_key == 'part_number':
+            return item.part_number.lower()
+        elif sort_key == 'upc':
+            return item.upc
+        elif sort_key == 'po':
+            return item.po.lower()
+        elif sort_key == 'date':
+            return item.date
         elif sort_key.startswith('custom_'):
             val = item.custom.get(sort_key[7:], '')
             if isinstance(val, (int, float)):
