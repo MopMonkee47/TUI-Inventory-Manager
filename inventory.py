@@ -1561,7 +1561,7 @@ def config_menu(stdscr, inventory=None):
                     else:
                         key = label.lower().replace(" ", "_")[:15]
                         while True:
-                            typ = get_input(stdscr, "Type [t:text n:number d:decimal m:money x:date]: ", 5, 2, 20, "").lower()
+                            typ = get_input(stdscr, "Type [t:text n:number d:decimal m:money x:date l:list]: ", 5, 2, 20, "").lower()
                             if typ in ('t', 'text'):
                                 typ = 'text'
                                 break
@@ -1577,12 +1577,29 @@ def config_menu(stdscr, inventory=None):
                             elif typ in ('x', 'date'):
                                 typ = 'date'
                                 break
-                        max_len_str = get_input(stdscr, "Max character length [default 30]: ", 6, 2, 10, "30", field_type="number")
-                        try:
-                            max_len = int(max_len_str) if max_len_str.strip() else 30
-                        except ValueError:
+                            elif typ in ('l', 'list'):
+                                typ = 'list'
+                                break
+                        if typ == 'date':
                             max_len = 30
-                        CUSTOM_FIELDS.append({'name':key, 'label':label, 'type':typ, 'max_len': max_len})
+                        elif typ == 'list':
+                            max_len = 30
+                            options = []
+                            stdscr.clear()
+                            stdscr.addstr(2, 2, "Add List Options (up to 10, empty line to finish)")
+                            for i in range(10):
+                                opt = get_input(stdscr, f"Option {i+1}: ", 4 + i, 2, 30, "")
+                                if not opt.strip():
+                                    break
+                                options.append(opt.strip())
+                            CUSTOM_FIELDS.append({'name':key, 'label':label, 'type':typ, 'max_len': max_len, 'options': options})
+                        else:
+                            max_len_str = get_input(stdscr, "Max character length [default 30]: ", 6, 2, 10, "30", field_type="number")
+                            try:
+                                max_len = int(max_len_str) if max_len_str.strip() else 30
+                            except ValueError:
+                                max_len = 30
+                            CUSTOM_FIELDS.append({'name':key, 'label':label, 'type':typ, 'max_len': max_len})
                         save_config()
                         stdscr.addstr(8, 2, "Added. Press any key...")
                         stdscr.getch()
@@ -1821,46 +1838,168 @@ def add_item(stdscr, inventory):
         'min_value': '0.00', 'max_value': '0.00', 'sale': '0.00'
     }
 
-    builtin_prompts = {
-        'name':        ("Name:          ", 40, "text"),
-        'quantity':    ("Quantity:      ", 10, "number"),
-        'cost':        ("Cost ($):      ", 12, "money"),
-        'location':    ("Location:      ", 30, "text"),
-        'description': ("Description:   ", 60, "text"),
-        'min_value':   ("Min Value ($): ", 12, "money"),
-        'max_value':   ("Max Value ($): ", 12, "money"),
-        'sale':        ("Sale Price ($):", 12, "money"),
-    }
-
     field_values = {}
     for key in defaults:
         if key not in INPUT_FIELDS:
             field_values[key] = defaults[key]
 
-    def calc_y_up_to(index):
+    def get_label(key):
+        if key in AVAILABLE_INPUT_FIELDS:
+            return AVAILABLE_INPUT_FIELDS[key]['label']
+        elif key.startswith('custom_'):
+            for cf in CUSTOM_FIELDS:
+                if cf['name'] == key[7:]:
+                    return cf['label']
+        return None
+
+    def get_max_len(key):
+        if key in AVAILABLE_INPUT_FIELDS:
+            return 40
+        for cf in CUSTOM_FIELDS:
+            if cf['name'] == key[7:]:
+                return cf.get('max_len', 30)
+        return 30
+
+    def get_field_type(key):
+        if key in AVAILABLE_INPUT_FIELDS:
+            return AVAILABLE_INPUT_FIELDS[key]['type']
+        for cf in CUSTOM_FIELDS:
+            if cf['name'] == key[7:]:
+                return cf.get('type', 'text')
+        return None
+
+    def calc_y(index):
         cy = 2
         for i in range(index):
             k = INPUT_FIELDS[i]
-            if k in builtin_prompts:
-                cy += 1
-            elif k.startswith('custom_'):
+            if get_label(k) is None:
+                continue
+            if k.startswith('custom_'):
                 for field in CUSTOM_FIELDS:
-                    if field['name'] == k[7:]:
-                        if field.get('type') == 'date':
-                            cy += 4
-                        else:
-                            cy += 1
+                    if field['name'] == k[7:] and field.get('type') == 'date':
+                        cy += 1
                         break
+            cy += 1
         return cy
+
+    def redraw_screen(up_to_idx):
+        h, w = stdscr.getmaxyx()
+        for row in range(h):
+            try:
+                stdscr.addstr(row, 0, " " * (w - 1))
+            except curses.error:
+                pass
+        stdscr.addstr(0, 0, "Add New Item (Esc: cancel, Up: go back)")
+        fy = 1
+        for i in range(up_to_idx):
+            fk = INPUT_FIELDS[i]
+            label = get_label(fk)
+            if label is None:
+                continue
+            fv = field_values.get(fk, '')
+            ftype = get_field_type(fk)
+            if ftype == 'money' and isinstance(fv, (int, float)):
+                fv = f"${fv:,.2f}"
+            elif ftype == 'decimal' and isinstance(fv, (int, float)):
+                fv = f"{fv:,.2f}"
+            elif ftype == 'number' and isinstance(fv, (int, float)):
+                fv = f"{fv:,}"
+            else:
+                fv = str(fv) if fv != '' else ''
+            stdscr.addstr(fy, 0, f"  {label + ':':<16}{fv}")
+            fy += 1
+        stdscr.refresh()
 
     y = 2
     idx = 0
     while idx < len(INPUT_FIELDS):
         key = INPUT_FIELDS[idx]
-        y = calc_y_up_to(idx)
-        if key in builtin_prompts:
-            prompt, max_len, ftype = builtin_prompts[key]
-            result = get_input(stdscr, prompt, y, 0, max_len, defaults.get(key, ""), ftype, allow_cancel=True)
+        label = get_label(key)
+        if label is None:
+            idx += 1
+            continue
+        y = calc_y(idx)
+        ftype = get_field_type(key)
+
+        if ftype == 'date':
+            stdscr.addstr(y, 0, f"  {label + ':':<16}Enter date:")
+            result = get_date_input(stdscr, "", y + 1, 0, allow_cancel=True)
+            if result == "__CANCEL__":
+                stdscr.addstr(min(y + 5, h - 2), 0, "Cancelled. Press any key...")
+                stdscr.getch()
+                return
+            if result == "__GOBACK__":
+                if idx > 0:
+                    idx -= 1
+                    redraw_screen(idx)
+                    continue
+                else:
+                    continue
+            field_values[key] = result if result else 'NA'
+            redraw_screen(idx + 1)
+        elif ftype == 'list':
+            stdscr.addstr(y, 0, f"  {label + ':':<16}Select option:")
+            options = []
+            for cf in CUSTOM_FIELDS:
+                if cf['name'] == key[7:]:
+                    options = cf.get('options', [])
+                    break
+            for i, opt in enumerate(options):
+                stdscr.addstr(y + 1 + i, 2, f"{i+1}. {opt}")
+            stdscr.addstr(y + 1 + len(options), 0, "Enter number: ")
+            stdscr.refresh()
+            choice_str = ""
+            while True:
+                ch = stdscr.getch()
+                if ch in (10, 13, curses.KEY_ENTER):
+                    break
+                elif ch == 27:
+                    stdscr.addstr(min(y + len(options) + 3, h - 2), 0, "Cancelled. Press any key...")
+                    stdscr.getch()
+                    return
+                elif ch == curses.KEY_UP:
+                    if idx > 0:
+                        idx -= 1
+                        redraw_screen(idx)
+                        choice_str = "__GOBACK__"
+                        break
+                    else:
+                        continue
+                elif ch in (8, 127, curses.KEY_BACKSPACE, curses.KEY_DC):
+                    if choice_str:
+                        choice_str = choice_str[:-1]
+                        try:
+                            prompt_x = 15
+                            stdscr.addstr(y + 1 + len(options), prompt_x, "   ")
+                            stdscr.addstr(y + 1 + len(options), prompt_x, choice_str)
+                            stdscr.move(y + 1 + len(options), prompt_x + len(choice_str))
+                        except curses.error:
+                            pass
+                        stdscr.refresh()
+                elif 32 <= ch <= 126 and len(choice_str) < 3:
+                    choice_str += chr(ch)
+                    try:
+                        stdscr.addch(y + 1 + len(options), 15 + len(choice_str) - 1, ch)
+                        stdscr.move(y + 1 + len(options), 15 + len(choice_str))
+                    except curses.error:
+                        pass
+                    stdscr.refresh()
+            if choice_str == "__GOBACK__":
+                continue
+            try:
+                choice_num = int(choice_str)
+                if 1 <= choice_num <= len(options):
+                    field_values[key] = options[choice_num - 1]
+                else:
+                    field_values[key] = 'NA'
+            except ValueError:
+                field_values[key] = choice_str if choice_str else 'NA'
+            redraw_screen(idx + 1)
+        else:
+            prompt = f"  {label + ':':<16}"
+            max_len = get_max_len(key)
+            default_val = defaults.get(key, "")
+            result = get_input(stdscr, prompt, y, 0, max_len, default_val, ftype, allow_cancel=True)
             if result == "__CANCEL__":
                 stdscr.addstr(min(y + 1, h - 2), 0, "Cancelled. Press any key...")
                 stdscr.getch()
@@ -1868,24 +2007,7 @@ def add_item(stdscr, inventory):
             if result == "__GOBACK__":
                 if idx > 0:
                     idx -= 1
-                    stdscr.clear()
-                    stdscr.addstr(0, 0, "Add New Item (Esc: cancel, Up: go back)")
-                    stdscr.addstr(1, 0, "Previous fields:")
-                    fy = 2
-                    for i in range(idx):
-                        fk = INPUT_FIELDS[i]
-                        if fk in builtin_prompts:
-                            fp, _, _ = builtin_prompts[fk]
-                            fv = field_values.get(fk, '')
-                            stdscr.addstr(fy, 0, f"  {fp.strip()}{fv}")
-                            fy += 1
-                        elif fk.startswith('custom_'):
-                            for cf in CUSTOM_FIELDS:
-                                if cf['name'] == fk[7:]:
-                                    fv = field_values.get(fk, '')
-                                    stdscr.addstr(fy, 0, f"  {(cf['label'] + ':').ljust(15)}{fv}")
-                                    fy += 1
-                                    break
+                    redraw_screen(idx)
                     continue
                 else:
                     continue
@@ -1894,84 +2016,7 @@ def add_item(stdscr, inventory):
                 stdscr.addstr(min(y + 2, h - 2), 0, "Cancelled. Press any key...")
                 stdscr.getch()
                 return
-        elif key.startswith('custom_'):
-            cf_name = key[7:]
-            for field in CUSTOM_FIELDS:
-                if field['name'] == cf_name:
-                    ftype = field.get('type', 'text')
-                    if ftype == 'date':
-                        label = (field['label'] + ":").ljust(15)
-                        stdscr.addstr(y, 0, label + "Enter date:")
-                        result = get_date_input(stdscr, "", y + 1, 0, allow_cancel=True)
-                        if result == "__CANCEL__":
-                            stdscr.addstr(min(y + 5, h - 2), 0, "Cancelled. Press any key...")
-                            stdscr.getch()
-                            return
-                        if result == "__GOBACK__":
-                            if idx > 0:
-                                idx -= 1
-                                stdscr.clear()
-                                stdscr.addstr(0, 0, "Add New Item (Esc: cancel, Up: go back)")
-                                stdscr.addstr(1, 0, "Previous fields:")
-                                fy = 2
-                                for i in range(idx):
-                                    fk = INPUT_FIELDS[i]
-                                    if fk in builtin_prompts:
-                                        fp, _, _ = builtin_prompts[fk]
-                                        fv = field_values.get(fk, '')
-                                        stdscr.addstr(fy, 0, f"  {fp.strip()}{fv}")
-                                        fy += 1
-                                    elif fk.startswith('custom_'):
-                                        for cf in CUSTOM_FIELDS:
-                                            if cf['name'] == fk[7:]:
-                                                fv = field_values.get(fk, '')
-                                                stdscr.addstr(fy, 0, f"  {(cf['label'] + ':').ljust(15)}{fv}")
-                                                fy += 1
-                                                break
-                                continue
-                            else:
-                                continue
-                        field_values[key] = result if result else 'NA'
-                    else:
-                        label = (field['label'] + ":").ljust(15)
-                        max_len = field.get('max_len', 30)
-                        result = get_input(stdscr, label, y, 0, max_len, "", ftype, allow_cancel=True)
-                        if result == "__CANCEL__":
-                            stdscr.addstr(min(y + 2, h - 2), 0, "Cancelled. Press any key...")
-                            stdscr.getch()
-                            return
-                        if result == "__GOBACK__":
-                            if idx > 0:
-                                idx -= 1
-                                stdscr.clear()
-                                stdscr.addstr(0, 0, "Add New Item (Esc: cancel, Up: go back)")
-                                stdscr.addstr(1, 0, "Previous fields:")
-                                fy = 2
-                                for i in range(idx):
-                                    fk = INPUT_FIELDS[i]
-                                    if fk in builtin_prompts:
-                                        fp, _, _ = builtin_prompts[fk]
-                                        fv = field_values.get(fk, '')
-                                        stdscr.addstr(fy, 0, f"  {fp.strip()}{fv}")
-                                        fy += 1
-                                    elif fk.startswith('custom_'):
-                                        for cf in CUSTOM_FIELDS:
-                                            if cf['name'] == fk[7:]:
-                                                fv = field_values.get(fk, '')
-                                                stdscr.addstr(fy, 0, f"  {(cf['label'] + ':').ljust(15)}{fv}")
-                                                fy += 1
-                                                break
-                                continue
-                            else:
-                                continue
-                        if ftype in ('number', 'money', 'decimal'):
-                            try:
-                                field_values[key] = float(result) if result else 0
-                            except ValueError:
-                                field_values[key] = 0 if ftype == 'number' else 0.0
-                        else:
-                            field_values[key] = result if result else 'NA'
-                    break
+            redraw_screen(idx + 1)
         idx += 1
 
     name = field_values['name']
@@ -2034,10 +2079,8 @@ def add_item(stdscr, inventory):
                         ftype = cf.get('type', 'text')
                         break
                 else:
-                    # Custom field not found
-                    label = key
-                    value = ''
-                    ftype = 'text'
+                    # Custom field not found, skip it
+                    continue
             else:
                 # Standard field
                 label = AVAILABLE_INPUT_FIELDS[key]['label']
@@ -2283,6 +2326,28 @@ def edit_item(stdscr, inventory, orig_idx):
             stdscr.addstr(3, 0, f"Edit {field['label']}")
             stdscr.addstr(4, 0, f"Current: {curr_str}")
             val = get_date_input(stdscr, "", 5, 0)
+        elif field['type'] == 'list':
+            options = field.get('options', [])
+            stdscr.addstr(3, 0, f"Edit {field['label']}")
+            stdscr.addstr(4, 0, f"Current: {curr_str}")
+            for i, opt in enumerate(options):
+                stdscr.addstr(5 + i, 2, f"{i+1}. {opt}")
+            stdscr.addstr(5 + len(options), 0, "Enter number: ")
+            stdscr.refresh()
+            curses.echo()
+            try:
+                choice_str = stdscr.getstr(5 + len(options), 15, 3).decode('utf-8').strip()
+            except:
+                choice_str = ""
+            curses.noecho()
+            try:
+                choice_num = int(choice_str)
+                if 1 <= choice_num <= len(options):
+                    val = options[choice_num - 1]
+                else:
+                    val = curr_str
+            except ValueError:
+                val = curr_str
         else:
             try:
                 val = get_input(stdscr, prompt, 3, 0,
@@ -2499,6 +2564,29 @@ def edit_item(stdscr, inventory, orig_idx):
                 stdscr.addstr(y, 0, f"Edit {field['label']}")
                 val = get_date_input(stdscr, "", y + 1, 0)
                 y += 4
+            elif field['type'] == 'list':
+                options = field.get('options', [])
+                stdscr.addstr(y, 0, f"Edit {field['label']}")
+                stdscr.addstr(y + 1, 0, f"Current: {curr_str}")
+                for i, opt in enumerate(options):
+                    stdscr.addstr(y + 2 + i, 2, f"{i+1}. {opt}")
+                stdscr.addstr(y + 2 + len(options), 0, "Enter number: ")
+                stdscr.refresh()
+                curses.echo()
+                try:
+                    choice_str = stdscr.getstr(y + 2 + len(options), 15, 3).decode('utf-8').strip()
+                except:
+                    choice_str = ""
+                curses.noecho()
+                try:
+                    choice_num = int(choice_str)
+                    if 1 <= choice_num <= len(options):
+                        val = options[choice_num - 1]
+                    else:
+                        val = curr_str
+                except ValueError:
+                    val = curr_str
+                y += 4 + len(options)
             else:
                 val = ""
                 try:
@@ -2608,6 +2696,29 @@ def edit_custom_fields_only(stdscr, inventory, orig_idx):
             stdscr.addstr(y, 0, f"Edit {field['label']}")
             val = get_date_input(stdscr, "", y + 1, 0)
             y += 4
+        elif field['type'] == 'list':
+            options = field.get('options', [])
+            stdscr.addstr(y, 0, f"Edit {field['label']}")
+            stdscr.addstr(y + 1, 0, f"Current: {curr_str}")
+            for i, opt in enumerate(options):
+                stdscr.addstr(y + 2 + i, 2, f"{i+1}. {opt}")
+            stdscr.addstr(y + 2 + len(options), 0, "Enter number: ")
+            stdscr.refresh()
+            curses.echo()
+            try:
+                choice_str = stdscr.getstr(y + 2 + len(options), 15, 3).decode('utf-8').strip()
+            except:
+                choice_str = ""
+            curses.noecho()
+            try:
+                choice_num = int(choice_str)
+                if 1 <= choice_num <= len(options):
+                    val = options[choice_num - 1]
+                else:
+                    val = curr_str
+            except ValueError:
+                val = curr_str
+            y += 4 + len(options)
         else:
             try:
                 val = get_input(stdscr, prompt, y, 0,
