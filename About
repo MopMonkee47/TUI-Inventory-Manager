@@ -3,23 +3,19 @@
 I love open source and a good TUI/CLI program. A good TUI/CLI is versatile and timeless.
 
 This is an attempt at a simple Inventory Management System that a user can custom build to their needs.
-Tracking inventory in a spreadsheet seems a little too primitive and data bases seem to daunting for 
-the average user. All the data is stored in a CSV file so things can be easily imported into a spread
-sheet if needed. You can hopefully make this program your own. 
+Tracking inventory in a spreadsheet seems a little too primitive and data bases can be a little daunting for the average user. All the data is stored in a CSV or simple text file so things can be easily imported into a spreadsheet if needed. You can hopefully make this program your own. 
 
 You can: 
-change the theme colour 
-change the programs name and subtitle 
-what gets asked when creating an item 
-Create custom fields to suit your need
-how and what is displayed on screen. 
-You can turn your history into some simple sales tracking if you turn on Monetization.
-You can run several instances by placing the main python file into a different folder and launching from
-from their. 
-You can even overwrite this About page it make it about what ever your tracking.
+* Change the theme colour 
+* Change the programs name and subtitle 
+* Customize what gets asked when creating an item 
+* Create custom fields to suit your need
+* Dictate how and what is displayed on screen. 
+* Turn your history into some simple sales tracking if you turn on Monetization.
+* Run several instances by placing the main python file into a different folder and launching fromfrom there. 
+* Overwrite this About page it make it about what ever your tracking.
 
-I am not a coder. I've been waiting for someone to make an app like this for years.
-Thanks to ai it has been prompted it into existence. I give as a gift. Don't like or want it; don't take it. 
+I am not a coder. I've been waiting for someone to make an app like this for years. Thanks to ai it has been prompted it into existence. I give as a gift. Don't like or want it; don't take it. 
 For those taking the gift; do what you want with it. Hopefully smarter people then I can make it better.
 If you feel you've have done better pass it on as open source as it was given.
 

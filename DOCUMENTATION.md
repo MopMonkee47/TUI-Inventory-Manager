@@ -427,11 +427,17 @@ The application uses a defensive coding style throughout:
 
 ## Limitations & Notes
 
-1. **No scrolling in the main list** -- Items that don't fit on screen are simply not shown (the list is truncated at `h - 3` rows).
-2. **No pagination in sales history** -- Only shows as many sales as fit on screen.
-3. **Linear search for original indices** -- `draw_menu()` uses `inventory.index(item)` which is O(n) per item, making it O(n^2) overall. Fine for small inventories but would be slow with thousands of items.
-4. **Single-level backup** -- Only the most recent backup is kept (`.bak` file is overwritten each save).
-5. **No concurrent access protection** -- No file locking; not safe if multiple instances run simultaneously.
-6. **Max 5 custom fields** -- Limited to prevent UI crowding.
-7. **Max 5 active columns** -- Limited to prevent display issues on smaller terminals.
-8. **Column width limits** -- Width must be between 3 and 30 characters.
+1. **Single-level backup** -- Only the most recent backup is kept (`.bak` file is overwritten each save).
+2. **No concurrent access protection** -- No file locking; not safe if multiple instances run simultaneously.
+3. **Max 5 custom fields** -- Limited to prevent UI crowding.
+4. **Column width limits** -- Width must be between 3 and 30 characters.
+
+---
+
+## Roadmap
+
+### Planned Features
+
+1. **Date-based filtering in sales history** -- Filter sales by date range instead of just text search. Could use a calendar-style picker or MM/DD/YYYY-MM/DD/YYYY input format.
+
+2. **Low stock report** -- Dedicated view showing only items at or below their per-item stock thresholds. Could include sortable columns, export capability, and color-coded severity levels.

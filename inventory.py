@@ -1576,6 +1576,18 @@ def config_menu(stdscr, inventory=None):
                     save_config()
             except:
                 curses.noecho()
+        elif current_tab == 1 and key == ord('s'):
+            try:
+                stdscr.addstr(y+12, 2, "Enter new subtitle: ".ljust(w-3))
+                stdscr.refresh()
+                curses.echo()
+                new_subtitle = stdscr.getstr(y+12, 21, 40).decode('utf-8').strip()
+                curses.noecho()
+                if new_subtitle:
+                    SUBTITLE = new_subtitle
+                    save_config()
+            except:
+                curses.noecho()
         elif current_tab == 0 and key == ord('a'):
             if len(CUSTOM_FIELDS) >= 5:
                 try:
@@ -3065,7 +3077,7 @@ def search_mode(stdscr):
     term = get_input(stdscr, "> ", 1, 0, 60)
     return term.strip()
 
-def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='name', sort_directions=None):
+def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='name', sort_directions=None, scroll_offset=0):
     global COLUMNS, AVAILABLE_COLUMNS
     load_config()
     if sort_directions is None:
@@ -3157,7 +3169,9 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     stdscr.addstr(6, 0, header_dashes[:w])
     
     for idx, item in enumerate(filtered):
-        y = idx + 7
+        if idx < scroll_offset:
+            continue
+        y = idx - scroll_offset + 7
         if y >= h - 3: break
 
         row_parts = []
@@ -3211,11 +3225,11 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
 
     stats = f"Items:{total_items}"
     sale_control = "r:sale " if SALE_ENABLED else ""
-    controls = f"q:quit a:add e:edit d:delete {sale_control}h:history c:configure ENTER:details"
+    controls = f"q:quit a:add e:edit d:delete {sale_control}h:history c:configure PgUp/PgDn:scroll ENTER:details"
     footer = f"{stats} | {controls}"
     draw_footer(stdscr, footer)
 
-    return filtered, original_indices
+    return filtered, original_indices, scroll_offset
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Size checking helper
@@ -3403,6 +3417,7 @@ def main(stdscr):
     search_term = ""
     sort_key = 'name'
     sort_directions = {'name': 1, 'quantity': 1, 'location': 1}
+    scroll_offset = 0
 
     while True:
         stdscr.timeout(-1)
@@ -3418,11 +3433,14 @@ def main(stdscr):
             continue
 
         # ── Draw the current state (this is what the user sees right now) ──
-        filtered, original_indices = draw_menu(
+        h, w = stdscr.getmaxyx()
+        filtered, original_indices, scroll_offset = draw_menu(
             stdscr, selected_row_idx, inventory,
-            search_term, sort_key, sort_directions
+            search_term, sort_key, sort_directions, scroll_offset
         )
         filtered_len = len(filtered)
+        visible_lines = h - 10
+        max_scroll = max(0, filtered_len - visible_lines)
 
         # ── Wait for user input ────────────────────────────────────────────
         key = stdscr.getch()
@@ -3436,9 +3454,25 @@ def main(stdscr):
         # ── Normal key handling ────────────────────────────────────────────
         if key == curses.KEY_UP and selected_row_idx > 0:
             selected_row_idx -= 1
+            if selected_row_idx < scroll_offset:
+                scroll_offset = selected_row_idx
 
         elif key == curses.KEY_DOWN and selected_row_idx < filtered_len - 1:
             selected_row_idx += 1
+            if selected_row_idx >= scroll_offset + visible_lines:
+                scroll_offset = selected_row_idx - visible_lines + 1
+                if scroll_offset > max_scroll:
+                    scroll_offset = max_scroll
+
+        elif key in (curses.KEY_PPAGE, ord('K')):
+            if scroll_offset > 0:
+                scroll_offset = max(0, scroll_offset - visible_lines)
+                selected_row_idx = max(0, selected_row_idx - visible_lines)
+
+        elif key in (curses.KEY_NPAGE, ord('J')):
+            if scroll_offset < max_scroll:
+                scroll_offset = min(max_scroll, scroll_offset + visible_lines)
+                selected_row_idx = min(filtered_len - 1, selected_row_idx + visible_lines)
 
         elif key == ord('q'):
             break
@@ -3446,10 +3480,12 @@ def main(stdscr):
         elif key == ord('a'):
             add_item(stdscr, inventory)
             selected_row_idx = 0
+            scroll_offset = 0
 
         elif key == ord('s'):
             search_term = inline_search(stdscr, search_term)
             selected_row_idx = 0
+            scroll_offset = 0
 
         elif key == ord('e') and filtered_len > 0:
             orig_idx = original_indices[selected_row_idx]
@@ -3459,6 +3495,7 @@ def main(stdscr):
             if search_term:
                 search_term = ""
                 selected_row_idx = 0
+                scroll_offset = 0
 
         elif key in (ord('n'), ord('t'), ord('l')):
             key_map = {ord('n'):'name', ord('t'):'quantity', ord('l'):'location'}
@@ -3469,6 +3506,7 @@ def main(stdscr):
                 sort_key = new_key
                 sort_directions[sort_key] = 1
             selected_row_idx = 0
+            scroll_offset = 0
 
         elif ord('1') <= key <= ord('9'):
             col_idx = key - ord('1')
@@ -3480,6 +3518,7 @@ def main(stdscr):
                     sort_key = new_key
                     sort_directions[sort_key] = 1
                 selected_row_idx = 0
+                scroll_offset = 0
 
         elif key == ord('r') and filtered_len > 0 and SALE_ENABLED:
             orig_idx = original_indices[selected_row_idx]
@@ -3491,6 +3530,8 @@ def main(stdscr):
             deleted = delete_item(stdscr, inventory, orig_idx)
             if deleted:
                 selected_row_idx = max(0, min(selected_row_idx, len(inventory) - 1))
+                if selected_row_idx < scroll_offset:
+                    scroll_offset = selected_row_idx
 
         elif key == ord('h'):
             view_sales_history(stdscr)
@@ -3508,6 +3549,8 @@ def main(stdscr):
 
             if was_deleted:
                 selected_row_idx = max(0, min(selected_row_idx, len(inventory) - 1))
+                if selected_row_idx < scroll_offset:
+                    scroll_offset = selected_row_idx
 
             # No need to redraw here — next loop iteration will do it
 
