@@ -2277,19 +2277,20 @@ def select_field_to_edit(stdscr, item):
         "6.  Min Value (hidden)",
         "7.  Max Value (hidden)",
         "8.  Sale Price (hidden)",
-        "9.  All fields",
-        "10. Part#",
-        "11. UPC",
-        "12. PO",
-        "13. Date",
+        "9.  Part#",
+        "10. UPC",
+        "11. PO",
+        "12. Date",
     ]
     for i, field in enumerate(CUSTOM_FIELDS):
-        options.append(f"{14 + i}. {field['label']} (custom)")
+        options.append(f"{13 + i}. {field['label']} (custom)")
+    all_fields_num = 13 + len(CUSTOM_FIELDS)
+    options.append(f"{all_fields_num}. All fields")
     options.append("L.  Low stock threshold")
     options.append("R.  Critical stock threshold")
     options.append("0.  Cancel")
 
-    option_values = list(range(1, 14)) + list(range(14, 14 + len(CUSTOM_FIELDS))) + ['L', 'R', 'C', None]
+    option_values = list(range(1, 13)) + list(range(13, 13 + len(CUSTOM_FIELDS))) + [all_fields_num, 'L', 'R', None]
     
     selected_idx = 0
     typed_input = ""
@@ -2368,7 +2369,7 @@ def select_field_to_edit(stdscr, item):
         low_thresh = item.custom.get('low_stock_threshold', 5)
         crit_thresh = item.custom.get('critical_stock', 3)
         try:
-            stdscr.addnstr(y, 4, f"Low threshold:  {low_thresh}", w-5); y += 1
+            stdscr.addnstr(y, 4, f"Low threshold: {low_thresh}", w-5); y += 1
             stdscr.addnstr(y, 4, f"Critical:      {crit_thresh}", w-5); y += 1
         except:
             y += 2
@@ -2426,9 +2427,7 @@ def select_field_to_edit(stdscr, item):
                     return 'R'
                 try:
                     ch = int(choice_str)
-                    if 1 <= ch <= 9:
-                        return ch
-                    if 10 <= ch < 10 + len(CUSTOM_FIELDS):
+                    if 1 <= ch <= 13 + len(CUSTOM_FIELDS):
                         return ch
                 except ValueError:
                     pass
@@ -2657,8 +2656,14 @@ def edit_item(stdscr, inventory, orig_idx):
         )
         safe_save_inventory(inventory)
 
+        if field['type'] == 'list':
+            msg_y = 6 + len(field.get('options', []))
+        elif field['type'] == 'date':
+            msg_y = 6
+        else:
+            msg_y = 5
         try:
-            stdscr.addstr(5, 0, "Custom field updated. Press any key...")
+            stdscr.addstr(msg_y, 0, "Custom field updated. Press any key...")
             stdscr.refresh()
             stdscr.getch()
         except:
@@ -2834,7 +2839,8 @@ def edit_item(stdscr, inventory, orig_idx):
 
     # Custom fields section
     new_custom = item.custom.copy()
-    if choice == 9 and CUSTOM_FIELDS:
+    all_fields_choice = 13 + len(CUSTOM_FIELDS)
+    if choice == 9 or choice == all_fields_choice:
         y += 2
         try:
             stdscr.addnstr(y-1, 0, "-" * min(40, w-1), w-1)
