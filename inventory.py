@@ -1656,11 +1656,11 @@ def config_menu(stdscr, inventory=None):
                                 options.append(opt.strip())
                             CUSTOM_FIELDS.append({'name':key, 'label':label, 'type':typ, 'max_len': max_len, 'options': options})
                         else:
-                            max_len_str = get_input(stdscr, "Max character length [default 30]: ", 6, 2, 10, "30", field_type="number")
+                            max_len_str = get_input(stdscr, "Max character length [default 60]: ", 6, 2, 10, "60", field_type="number")
                             try:
-                                max_len = int(max_len_str) if max_len_str.strip() else 30
+                                max_len = int(max_len_str) if max_len_str.strip() else 60
                             except ValueError:
-                                max_len = 30
+                                max_len = 60
                             CUSTOM_FIELDS.append({'name':key, 'label':label, 'type':typ, 'max_len': max_len})
                         save_config()
                         msg_y = 16 if typ == 'list' else 8
@@ -1835,7 +1835,7 @@ def validate_inputs(name, qty_str, cost_str):
         errors.append("Cost must be number")
     return errors
 
-def get_input(stdscr, prompt, y, x, max_len=40, default="", field_type="text", allow_cancel=False):
+def get_input(stdscr, prompt, y, x, max_len=60, default="", field_type="text", allow_cancel=False):
     stdscr.addstr(y, x, prompt)
     prompt_x = x + len(prompt)
     stdscr.move(y, prompt_x)
@@ -1996,11 +1996,11 @@ def add_item(stdscr, inventory):
 
     def get_max_len(key):
         if key in AVAILABLE_INPUT_FIELDS:
-            return 40
+            return 60
         for cf in CUSTOM_FIELDS:
             if cf['name'] == key[7:]:
-                return cf.get('max_len', 30)
-        return 30
+                return cf.get('max_len', 60)
+        return 60
 
     def get_field_type(key):
         if key in AVAILABLE_INPUT_FIELDS:
@@ -2774,7 +2774,7 @@ def edit_item(stdscr, inventory, orig_idx):
             return default_val
 
     if choice in (1, 9):
-        new_name = safe_input("Name", new_name, y, 40)
+        new_name = safe_input("Name", new_name, y, 60)
         y += 1
 
     if choice in (2, 9):
@@ -2790,7 +2790,7 @@ def edit_item(stdscr, inventory, orig_idx):
         y += 1
 
     if choice in (4, 9):
-        new_location = safe_input("Location", new_location, y, 30)
+        new_location = safe_input("Location", new_location, y, 60)
         y += 1
 
     if choice in (5, 9):
@@ -2816,7 +2816,7 @@ def edit_item(stdscr, inventory, orig_idx):
         y += 1
 
     if choice in (10, 9):
-        new_part_number = safe_input("Part#", item.part_number, y, 40)
+        new_part_number = safe_input("Part#", item.part_number, y, 60)
         y += 1
 
     if choice in (11, 9):
