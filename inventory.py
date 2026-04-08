@@ -51,6 +51,8 @@ AVAILABLE_COLUMNS = {
     'date': {'label': 'Date', 'width': 12, 'align': 'left'},
 }
 
+FILTERABLE_COLUMNS = ['location', 'po', 'date']
+
 COLUMNS = [
     {'key': 'name', 'width': 24, 'align': 'left'},
     {'key': 'quantity', 'width': 6, 'align': 'right'},
@@ -3154,17 +3156,140 @@ def search_mode(stdscr):
     term = get_input(stdscr, "> ", 1, 0, 60)
     return term.strip()
 
-def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='name', sort_directions=None, scroll_offset=0):
-    global COLUMNS, AVAILABLE_COLUMNS
+FILTERABLE_COLUMNS = ['location', 'po', 'date']
+
+def get_filterable_columns():
+    global CUSTOM_FIELDS
+    load_config()
+    cols = FILTERABLE_COLUMNS.copy()
+    for field in CUSTOM_FIELDS:
+        if field.get('type') == 'list':
+            cols.append('custom_' + field['name'])
+    return cols
+
+def get_unique_values(inventory, column_key):
+    global CUSTOM_FIELDS
+    load_config()
+    
+    if column_key.startswith('custom_'):
+        field_name = column_key[7:]
+        for field in CUSTOM_FIELDS:
+            if field['name'] == field_name and field.get('type') == 'list':
+                return sorted(field.get('options', []))
+        return []
+    
+    if column_key == 'location':
+        values = set()
+        for item in inventory:
+            if item.location:
+                values.add(item.location)
+        return sorted(values)
+    
+    if column_key == 'po':
+        values = set()
+        for item in inventory:
+            if item.po:
+                values.add(item.po)
+        return sorted(values)
+    
+    if column_key == 'date':
+        values = set()
+        for item in inventory:
+            if item.date:
+                values.add(item.date)
+        return sorted(values)
+    
+    return []
+
+def filter_select_menu(stdscr, inventory, column_key):
+    global CUSTOM_FIELDS
+    load_config()
+    
+    h, w = stdscr.getmaxyx()
+    
+    if column_key.startswith('custom_'):
+        field_name = column_key[7:]
+        for field in CUSTOM_FIELDS:
+            if field['name'] == field_name:
+                label = field.get('label', field_name)
+                options = sorted(field.get('options', []))
+                break
+        else:
+            return None
+    else:
+        label = AVAILABLE_COLUMNS.get(column_key, {}).get('label', column_key)
+        options = get_unique_values(inventory, column_key)
+    
+    if not options:
+        return None
+    
+    if len(options) > 15:
+        return None
+    
+    current_option = 0
+    while True:
+        stdscr.clear()
+        stdscr.attron(curses.color_pair(1))
+        stdscr.addstr(0, 0, f"Filter by {label}".center(min(w, 60)))
+        stdscr.attroff(curses.color_pair(1))
+        stdscr.addstr(1, 0, "")
+        stdscr.addstr(2, 0, "↑↓ navigate  Enter select  q cancel")
+        stdscr.addstr(3, 0, "─" * min(w, 60))
+        
+        visible_options = min(h - 6, len(options))
+        start_idx = max(0, current_option - visible_options + 1)
+        
+        for i in range(start_idx, min(start_idx + visible_options, len(options))):
+            y = i - start_idx + 4
+            if i == current_option:
+                stdscr.attron(curses.color_pair(4))
+                stdscr.addstr(y, 0, f"> {i+1}. {options[i]}")
+                stdscr.attroff(curses.color_pair(4))
+            else:
+                try:
+                    stdscr.addstr(y, 0, f"  {i+1}. {options[i]}")
+                except curses.error:
+                    pass
+        
+        stdscr.refresh()
+        key = stdscr.getch()
+        
+        if key == ord('q'):
+            return None
+        
+        if key == curses.KEY_UP and current_option > 0:
+            current_option -= 1
+        elif key == curses.KEY_DOWN and current_option < len(options) - 1:
+            current_option += 1
+        elif key in (10, curses.KEY_ENTER, ord(' ')):
+            return options[current_option]
+        elif key == curses.KEY_RESIZE:
+            continue
+
+def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='name', sort_directions=None, scroll_offset=0, column_filter=None):
+    global COLUMNS, AVAILABLE_COLUMNS, CUSTOM_FIELDS
     load_config()
     if sort_directions is None:
         sort_directions = {'name': 1, 'quantity': 1, 'location': 1}
+    if column_filter is None:
+        column_filter = {}
 
     stdscr.clear()
     h, w = stdscr.getmaxyx()
 
     term = search_term.lower()
     filtered = [item for item in inventory if (not HIDE_ZERO_QTY_ENABLED or item.quantity > 0) and (term in item.name.lower() or term in item.description.lower() or term in item.location.lower() or term in item.part_number.lower())]
+
+    for col_key, filter_val in column_filter.items():
+        if col_key.startswith('custom_'):
+            field_name = col_key[7:]
+            filtered = [item for item in filtered if item.custom.get(field_name, '') == filter_val]
+        elif col_key == 'location':
+            filtered = [item for item in filtered if item.location == filter_val]
+        elif col_key == 'po':
+            filtered = [item for item in filtered if item.po == filter_val]
+        elif col_key == 'date':
+            filtered = [item for item in filtered if item.date == filter_val]
 
     direction = sort_directions.get(sort_key, 1)
 
@@ -3212,7 +3337,24 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
     stdscr.addstr(1, 0, "")
 
     dir_symbol = "↓" if direction > 0 else "↑"
-    stdscr.addstr(2, 0, f"Search: {search_term or '(none)'}   Sort: {sort_key} {dir_symbol}   (s:search #:sort ESC:clear search)")
+    
+    filter_str = ""
+    if column_filter:
+        for col_key, val in column_filter.items():
+            if col_key.startswith('custom_'):
+                field_name = col_key[7:]
+                for field in CUSTOM_FIELDS:
+                    if field['name'] == field_name:
+                        label = field.get('label', field_name)
+                        break
+                else:
+                    label = col_key
+            else:
+                label = AVAILABLE_COLUMNS.get(col_key, {}).get('label', col_key)
+            filter_str = f"{label}={val}"
+            break
+    
+    stdscr.addstr(2, 0, f"Search: {search_term or '(none)'}   Filter: {filter_str or '(none)'}   Sort: {sort_key} {dir_symbol}   (s:search f:filter #:sort ESC:clear)")
 
     stdscr.addstr(3, 0, "─" * min(w, 100))
     stdscr.addstr(4, 0, "")
@@ -3492,6 +3634,7 @@ def main(stdscr):
 
     selected_row_idx = 0
     search_term = ""
+    column_filter = {}
     sort_key = 'name'
     sort_directions = {'name': 1, 'quantity': 1, 'location': 1}
     scroll_offset = 0
@@ -3513,7 +3656,7 @@ def main(stdscr):
         h, w = stdscr.getmaxyx()
         filtered, original_indices, scroll_offset = draw_menu(
             stdscr, selected_row_idx, inventory,
-            search_term, sort_key, sort_directions, scroll_offset
+            search_term, sort_key, sort_directions, scroll_offset, column_filter
         )
         filtered_len = len(filtered)
         visible_lines = h - 10
@@ -3564,13 +3707,77 @@ def main(stdscr):
             selected_row_idx = 0
             scroll_offset = 0
 
+        elif key == ord('f'):
+            filterable = get_filterable_columns()
+            visible_filterable = []
+            for col in COLUMNS:
+                if col['key'] in filterable:
+                    visible_filterable.append(col['key'])
+            
+            if not visible_filterable:
+                pass
+            else:
+                h, w = stdscr.getmaxyx()
+                stdscr.clear()
+                stdscr.attron(curses.color_pair(1))
+                stdscr.addstr(0, 0, "Select column to filter".center(min(w, 60)))
+                stdscr.attroff(curses.color_pair(1))
+                stdscr.addstr(2, 0, "Enter column number:")
+                stdscr.addstr(3, 0, "─" * min(w, 40))
+                
+                for i, col_key in enumerate(visible_filterable):
+                    if col_key.startswith('custom_'):
+                        field_name = col_key[7:]
+                        for field in CUSTOM_FIELDS:
+                            if field['name'] == field_name:
+                                label = field.get('label', field_name)
+                                break
+                        else:
+                            label = col_key
+                    else:
+                        label = AVAILABLE_COLUMNS.get(col_key, {}).get('label', col_key)
+                    stdscr.addstr(4 + i, 2, f"{i+1}. {label}")
+                
+                stdscr.addstr(4 + len(visible_filterable), 2, "q. Cancel")
+                stdscr.refresh()
+                
+                ch = stdscr.getch()
+                
+                if ord('1') <= ch <= ord('1') + len(visible_filterable) - 1:
+                    col_idx = ch - ord('1')
+                    col_key = visible_filterable[col_idx]
+                    
+                    unique_vals = get_unique_values(inventory, col_key)
+                    
+                    if not unique_vals:
+                        stdscr.clear()
+                        stdscr.addstr(0, 0, "No values to filter")
+                        stdscr.addstr(2, 0, "Press any key...")
+                        stdscr.refresh()
+                        stdscr.getch()
+                    elif len(unique_vals) > 15:
+                        stdscr.clear()
+                        stdscr.addstr(0, 0, f"Too many unique values ({len(unique_vals)})")
+                        stdscr.addstr(2, 0, "Use text search instead (s)")
+                        stdscr.addstr(4, 0, "Press any key...")
+                        stdscr.refresh()
+                        stdscr.getch()
+                    else:
+                        selected = filter_select_menu(stdscr, inventory, col_key)
+                        if selected:
+                            column_filter = {col_key: selected}
+                            search_term = ""
+                            selected_row_idx = 0
+                            scroll_offset = 0
+
         elif key == ord('e') and filtered_len > 0:
             orig_idx = original_indices[selected_row_idx]
             edit_item(stdscr, inventory, orig_idx)
 
         elif key == 27:
-            if search_term:
+            if search_term or column_filter:
                 search_term = ""
+                column_filter = {}
                 selected_row_idx = 0
                 scroll_offset = 0
 
