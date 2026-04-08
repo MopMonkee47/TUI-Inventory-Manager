@@ -857,7 +857,7 @@ def column_config_menu(stdscr):
         try:
             stdscr.addstr(h-4, 0, "·" * min(w, 80))
             stdscr.addstr(h-3, 2, "↑↓: navigate  Enter: toggle  +/-: width  a: align  d: default  q: back")
-            stdscr.addstr(h-2, 2, "(width 3-30)")
+            stdscr.addstr(h-2, 2, "(width 1-60)")
         except curses.error:
             pass
         
@@ -892,14 +892,14 @@ def column_config_menu(stdscr):
             if col['active']:
                 for c in COLUMNS:
                     if c['key'] == col['key']:
-                        c['width'] = min(30, c['width'] + 1)
+                        c['width'] = min(60, c['width'] + 1)
                         break
         elif key == ord('-'):
             col = all_columns[selected_idx]
             if col['active']:
                 for c in COLUMNS:
                     if c['key'] == col['key']:
-                        c['width'] = max(3, c['width'] - 1)
+                        c['width'] = max(1, c['width'] - 1)
                         break
         elif key == ord('a'):
             col = all_columns[selected_idx]
@@ -1075,7 +1075,7 @@ def history_column_config_menu(stdscr):
         try:
             stdscr.addstr(h-4, 0, "·" * min(w, 80))
             stdscr.addstr(h-3, 2, "↑↓: navigate  Enter: toggle  +/-: width  a: align  d: default  q: back")
-            stdscr.addstr(h-2, 2, "(width 3-30)")
+            stdscr.addstr(h-2, 2, "(width 1-60)")
         except curses.error:
             pass
         
@@ -1108,7 +1108,7 @@ def history_column_config_menu(stdscr):
             if col['active']:
                 for c in HISTORY_COLUMNS:
                     if c['key'] == col['key']:
-                        c['width'] = min(30, c['width'] + 1)
+                        c['width'] = min(60, c['width'] + 1)
                         break
         elif key == ord('-'):
             col = all_columns[selected_idx]
@@ -1661,28 +1661,105 @@ def config_menu(stdscr, inventory=None):
             curses.noecho()
             if cmd.isdigit() and 1 <= int(cmd) <= len(CUSTOM_FIELDS):
                 idx = int(cmd) - 1
-                old_label = CUSTOM_FIELDS[idx]['label']
-                stdscr.clear()
-                try:
-                    stdscr.addstr(2, 2, "Edit Field Label")
-                    stdscr.addstr(3, 2, f"Current label: {old_label}")
-                    new_label = get_input(stdscr, "New label: ", 5, 2, 30, old_label)
-                    if new_label.strip():
-                        CUSTOM_FIELDS[idx]['label'] = new_label.strip()
-                        new_key = new_label.lower().replace(" ", "_")[:15]
-                        old_key = CUSTOM_FIELDS[idx]['name']
-                        CUSTOM_FIELDS[idx]['name'] = new_key
-                        if inventory is not None:
-                            for item in inventory:
-                                if old_key in item.custom:
-                                    item.custom[new_key] = item.custom.pop(old_key)
+                field = CUSTOM_FIELDS[idx]
+                old_label = field['label']
+                field_type = field.get('type', 'text')
+                
+                while True:
+                    stdscr.clear()
+                    h, w = stdscr.getmaxyx()
+                    if h < 15 or w < 50:
+                        break
+                    try:
+                        stdscr.addstr(2, 2, "Edit Field")
+                        stdscr.addstr(3, 2, f"Label: {field['label']}")
+                        if field_type == 'list':
+                            stdscr.addstr(4, 2, "Type: List")
+                            options = field.get('options', [])
+                            stdscr.addstr(5, 2, "Options:")
+                            for i, opt in enumerate(options):
+                                stdscr.addstr(6 + i, 2, f"  {i+1}. {opt}")
+                            instr_y = 6 + len(options) + 2
+                            stdscr.addstr(instr_y, 2, "n: edit label  a: add option  d: delete option  q: save & back")
+                            prompt_base = 6 + len(options) + 4
+                        else:
+                            stdscr.addstr(4, 2, f"Type: {field_type}")
+                            instr_y = 6
+                            stdscr.addstr(instr_y, 2, "n: edit label  q: save & back")
+                            prompt_base = 8
+                    except curses.error:
+                        pass
+                    stdscr.refresh()
+                    key = stdscr.getch()
+                    
+                    if key == ord('q'):
                         save_config()
-                        if inventory:
-                            safe_save_inventory(inventory)
-                    stdscr.addstr(8, 2, "Updated. Press any key...")
-                    stdscr.getch()
-                except:
-                    pass
+                        break
+                    elif key == ord('n'):
+                        prompt_y = prompt_base
+                        stdscr.addstr(prompt_y, 2, "New label: ".ljust(w-3))
+                        curses.echo()
+                        try:
+                            new_label = stdscr.getstr(prompt_y, 12, 30).decode('utf-8').strip()
+                        except:
+                            new_label = ""
+                        curses.noecho()
+                        if new_label:
+                            field['label'] = new_label.strip()
+                            new_key = new_label.lower().replace(" ", "_")[:15]
+                            old_key = field['name']
+                            field['name'] = new_key
+                            if inventory is not None:
+                                for item in inventory:
+                                    if old_key in item.custom:
+                                        item.custom[new_key] = item.custom.pop(old_key)
+                            save_config()
+                            if inventory:
+                                safe_save_inventory(inventory)
+                    elif key == ord('a') and field_type == 'list':
+                        options = field.get('options', [])
+                        if len(options) >= 10:
+                            try:
+                                prompt_y = prompt_base
+                                stdscr.addstr(prompt_y, 2, "Max 10 options. Press any key...")
+                                stdscr.getch()
+                            except:
+                                pass
+                        else:
+                            prompt_y = prompt_base
+                            stdscr.addstr(prompt_y, 2, "New option: ".ljust(w-3))
+                            curses.echo()
+                            try:
+                                new_opt = stdscr.getstr(prompt_y, 13, 30).decode('utf-8').strip()
+                            except:
+                                new_opt = ""
+                            curses.noecho()
+                            if new_opt:
+                                options.append(new_opt.strip())
+                                field['options'] = options
+                                save_config()
+                    elif key == ord('d') and field_type == 'list':
+                        options = field.get('options', [])
+                        if not options:
+                            try:
+                                prompt_y = prompt_base
+                                stdscr.addstr(prompt_y, 2, "No options to delete. Press any key...")
+                                stdscr.getch()
+                            except:
+                                pass
+                        else:
+                            prompt_y = prompt_base
+                            stdscr.addstr(prompt_y, 2, "Delete which (1-" + str(len(options)) + "): ".ljust(w-3))
+                            curses.echo()
+                            try:
+                                del_cmd = stdscr.getstr(prompt_y, 23, 3).decode('utf-8').strip()
+                            except:
+                                del_cmd = ""
+                            curses.noecho()
+                            if del_cmd.isdigit() and 1 <= int(del_cmd) <= len(options):
+                                deleted_opt = options.pop(int(del_cmd) - 1)
+                                field['options'] = options
+                                save_config()
         elif current_tab == 0 and 48 <= key <= 57:
             cmd = chr(key)
             if cmd.isdigit() and 1 <= int(cmd) <= len(CUSTOM_FIELDS):
