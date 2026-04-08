@@ -1291,20 +1291,36 @@ def about_menu(stdscr):
         except Exception:
             lines = ["Unable to read About file."]
 
+        max_width = w - 5
+        wrapped_lines = []
+        for line in lines:
+            words = line.split()
+            current_line = ""
+            for word in words:
+                if not current_line:
+                    current_line = word
+                elif len(current_line) + 1 + len(word) <= max_width:
+                    current_line += " " + word
+                else:
+                    wrapped_lines.append(current_line)
+                    current_line = word
+            if current_line:
+                wrapped_lines.append(current_line)
+
         content_top = 2
         content_bottom = h - 3
         visible_lines = content_bottom - content_top
 
         for i in range(visible_lines):
             line_idx = scroll_offset + i
-            if line_idx >= len(lines):
+            if line_idx >= len(wrapped_lines):
                 break
             try:
-                stdscr.addstr(content_top + i, 2, lines[line_idx][:w-3])
+                stdscr.addstr(content_top + i, 2, wrapped_lines[line_idx])
             except curses.error:
                 pass
 
-        max_scroll = max(0, len(lines) - visible_lines)
+        max_scroll = max(0, len(wrapped_lines) - visible_lines)
 
         draw_footer(stdscr, "↑↓: scroll  r: reset to default  q: back")
 
