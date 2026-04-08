@@ -1,9 +1,9 @@
 ﻿Welcome to TUI Inventory.
 
-I love open source and a good TUI/CLI program. A good TUI/CLI is versatile and timeless.
+Love open source and a good TUI/CLI program. A good TUI/CLI is versatile and timeless.
 
 This is an attempt at a simple Inventory Management System that a user can custom build to their needs.
-Tracking inventory in a spreadsheet seems a little too primitive and data bases can be a little daunting for the average user. All the data is stored in a CSV or simple text file so things can be easily imported into a spreadsheet if needed. You can hopefully make this program your own. 
+Tracking inventory in a spreadsheet seems a little too primitive and databases can be a little daunting for the average user. All the data is stored in a CSV or simple text file so things can be easily imported into a spreadsheet if needed. You can hopefully make this program your own. 
 
 You can: 
 * Change the theme colour 
@@ -12,12 +12,12 @@ You can:
 * Create custom fields to suit your need
 * Dictate how and what is displayed on screen. 
 * Turn your history into some simple sales tracking if you turn on Monetization.
-* Run several instances by placing the main python file into a different folder and launching fromfrom there. 
+* Run several instances by placing the main python file into a different folder and launching from there. 
 * Overwrite this About page it make it about what ever your tracking.
 
-I am not a coder. I've been waiting for someone to make an app like this for years. Thanks to ai it has been prompted it into existence. I give as a gift. Don't like or want it; don't take it. 
+Not a coder. Been waiting for someone to make an app like this for years. Thanks to ai it has been prompted it into existence. This is a gift. Don't like or want it; don't take it. 
 For those taking the gift; do what you want with it. Hopefully smarter people then I can make it better.
-If you feel you've have done better pass it on as open source as it was given.
+If you feel you have done better pass it on as open source as it was given.
 
 Good Luck.
 

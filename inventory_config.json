@@ -1,33 +1,35 @@
 {
   "custom_fields": [
     {
-      "name": "upc",
-      "label": "UPC",
-      "type": "text"
-    },
-    {
-      "name": "other3",
-      "label": "Other3",
-      "type": "number"
-    },
-    {
-      "name": "part#",
-      "label": "Part#",
-      "type": "text"
-    },
-    {
-      "name": "sdfsdfndfjhkshd",
-      "label": "sdfsdfndfjhkshdfjhksjdfhkskklx",
-      "type": "text"
+      "name": "consoles",
+      "label": "Consoles",
+      "type": "list",
+      "max_len": 30,
+      "options": [
+        "Gameboy",
+        "Gamecube",
+        "NES",
+        "Genesis",
+        "Xbox",
+        "Xbox360",
+        "XboxSeriesX",
+        "Sony PS4",
+        "PS3",
+        "Other"
+      ]
     }
   ],
-  "theme_color": "magenta",
+  "theme_color": "cyan",
   "program_name": "TUI Inventory",
   "subtitle": "Track your inventory with ease",
-  "po_enabled": false,
-  "monetization_enabled": false,
+  "po_enabled": true,
+  "monetization_enabled": true,
   "color_critical_enabled": true,
   "delete_confirm_enabled": true,
+  "hide_zero_qty_enabled": false,
+  "auto_delete_zero_enabled": false,
+  "sale_enabled": true,
+  "date_format": "%d/%m/%Y",
   "columns": [
     {
       "key": "name",
@@ -37,7 +39,7 @@
     {
       "key": "quantity",
       "width": 6,
-      "align": "center"
+      "align": "right"
     },
     {
       "key": "cost",
@@ -45,13 +47,13 @@
       "align": "center"
     },
     {
-      "key": "location",
-      "width": 10,
-      "align": "center"
-    },
-    {
       "key": "description",
       "width": 20,
+      "align": "left"
+    },
+    {
+      "key": "location",
+      "width": 10,
       "align": "left"
     }
   ],
@@ -90,8 +92,8 @@
   "input_fields": [
     "name",
     "quantity",
-    "cost",
+    "description",
     "location",
-    "description"
+    "cost"
   ]
 }
