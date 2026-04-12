@@ -1840,6 +1840,7 @@ def get_input(stdscr, prompt, y, x, max_len=60, default="", field_type="text", a
     prompt_x = x + len(prompt)
     stdscr.move(y, prompt_x)
     stdscr.refresh()
+    curses.curs_set(1)
 
     val = ""
     while True:
@@ -1848,9 +1849,11 @@ def get_input(stdscr, prompt, y, x, max_len=60, default="", field_type="text", a
             break
         elif ch == 27:
             if allow_cancel:
+                curses.curs_set(0)
                 return "__CANCEL__"
         elif ch == curses.KEY_UP:
             if allow_cancel:
+                curses.curs_set(0)
                 return "__GOBACK__"
         elif ch in (8, 127, curses.KEY_BACKSPACE, curses.KEY_DC):
             if val:
@@ -1876,6 +1879,7 @@ def get_input(stdscr, prompt, y, x, max_len=60, default="", field_type="text", a
                 stdscr.addch(y, prompt_x + len(val) - 1, ch)
                 stdscr.refresh()
 
+    curses.curs_set(0)
     val = val.strip()
     if not val and default:
         return default
@@ -2276,21 +2280,22 @@ def select_field_to_edit(stdscr, item):
         "5.  Description",
         "6.  Min Value (hidden)",
         "7.  Max Value (hidden)",
-        "8.  Sale Price (hidden)",
-        "9.  Part#",
-        "10. UPC",
-        "11. PO",
-        "12. Date",
+        "8.  All fields",
     ]
+    custom_start = 8
     for i, field in enumerate(CUSTOM_FIELDS):
-        options.append(f"{13 + i}. {field['label']} (custom)")
-    all_fields_num = 13 + len(CUSTOM_FIELDS)
-    options.append(f"{all_fields_num}. All fields")
-    options.append("L.  Low stock threshold")
-    options.append("R.  Critical stock threshold")
+        num = custom_start + 1 + i
+        sep = "  " if num < 10 else " "
+        options.append(f"{num}.{sep}{field['label']} (custom)")
+    all_fields_num = custom_start + len(CUSTOM_FIELDS)
+    for j in range(1, 8):
+        num = all_fields_num + j
+        sep = "  " if num < 10 else " "
+        label = f"{num}.{sep}Part#" if j == 1 else f"{num}.{sep}UPC" if j == 2 else f"{num}.{sep}PO" if j == 3 else f"{num}.{sep}Date" if j == 4 else f"{num}.{sep}Sale Price (hidden)" if j == 5 else f"{num}.{sep}Low stock threshold" if j == 6 else f"{num}.{sep}Critical stock threshold"
+        options.append(label)
     options.append("0.  Cancel")
 
-    option_values = list(range(1, 13)) + list(range(13, 13 + len(CUSTOM_FIELDS))) + [all_fields_num, 'L', 'R', None]
+    option_values = list(range(1, custom_start + 1)) + list(range(custom_start + 1, custom_start + 1 + len(CUSTOM_FIELDS))) + [custom_start + len(CUSTOM_FIELDS) + 1, custom_start + len(CUSTOM_FIELDS) + 2, custom_start + len(CUSTOM_FIELDS) + 3, custom_start + len(CUSTOM_FIELDS) + 4, custom_start + len(CUSTOM_FIELDS) + 5, custom_start + len(CUSTOM_FIELDS) + 6, custom_start + len(CUSTOM_FIELDS) + 7, None]
     
     selected_idx = 0
     typed_input = ""
@@ -2427,7 +2432,7 @@ def select_field_to_edit(stdscr, item):
                     return 'R'
                 try:
                     ch = int(choice_str)
-                    if 1 <= ch <= 13 + len(CUSTOM_FIELDS):
+                    if 1 <= ch <= 15 + len(CUSTOM_FIELDS):
                         return ch
                 except ValueError:
                     pass
@@ -2449,11 +2454,19 @@ def edit_item(stdscr, inventory, orig_idx):
         return
     item = inventory[orig_idx]
 
+    part_choice = 9 + len(CUSTOM_FIELDS)  # 9 with 0 custom fields, 10 with 1, etc.
+    upc_choice = part_choice + 1
+    po_choice = upc_choice + 1
+    date_choice = po_choice + 1
+    sale_choice = date_choice + 1
+    low_choice = sale_choice + 1
+    crit_choice = low_choice + 1
+
     choice = select_field_to_edit(stdscr, item)
     if choice is None:
         return
 
-    if choice == 10:
+    if choice == part_choice:
         stdscr.clear()
         h, w = stdscr.getmaxyx()
         try:
@@ -2482,7 +2495,7 @@ def edit_item(stdscr, inventory, orig_idx):
             pass
         return
 
-    if choice == 11:
+    if choice == upc_choice:
         stdscr.clear()
         h, w = stdscr.getmaxyx()
         try:
@@ -2513,7 +2526,7 @@ def edit_item(stdscr, inventory, orig_idx):
             pass
         return
 
-    if choice == 12:
+    if choice == po_choice:
         stdscr.clear()
         h, w = stdscr.getmaxyx()
         try:
@@ -2543,7 +2556,7 @@ def edit_item(stdscr, inventory, orig_idx):
             pass
         return
 
-    if choice == 13:
+    if choice == date_choice:
         stdscr.clear()
         h, w = stdscr.getmaxyx()
         try:
@@ -2574,9 +2587,9 @@ def edit_item(stdscr, inventory, orig_idx):
             pass
         return
 
-    # Individual custom field edit (choices 14, 15, 16, ...)
-    if isinstance(choice, int) and 14 <= choice < 14 + len(CUSTOM_FIELDS):
-        field_idx = choice - 14
+    # Individual custom field edit (choices 9, 10, 11, ... based on count)
+    if isinstance(choice, int) and 9 <= choice < 9 + len(CUSTOM_FIELDS):
+        field_idx = choice - 9
         field = CUSTOM_FIELDS[field_idx]
         new_custom = item.custom.copy()
 
@@ -2700,7 +2713,69 @@ def edit_item(stdscr, inventory, orig_idx):
             pass
         return
 
+    low_choice = 14 + len(CUSTOM_FIELDS)
+    if choice == low_choice:
+        new_custom = item.custom.copy()
+        stdscr.clear()
+        try:
+            stdscr.addstr(0, 0, "Edit Low Stock Threshold")
+        except:
+            pass
+        curr = new_custom.get('low_stock_threshold', 5)
+        try:
+            val = get_input(stdscr, f"Low stock threshold [{curr}]: ", 2, 0, 5, str(curr))
+            if val.strip():
+                new_custom['low_stock_threshold'] = int(val)
+        except:
+            pass
+        inventory[orig_idx] = Item(
+            name=item.name, quantity=item.quantity, cost=item.cost,
+            min_value=item.min_value, max_value=item.max_value, sale=item.sale,
+            location=item.location, description=item.description,
+            timestamp=item.timestamp,
+            **new_custom
+        )
+        safe_save_inventory(inventory)
+        try:
+            stdscr.addstr(4, 0, "Threshold updated. Press any key...")
+            stdscr.refresh()
+            stdscr.getch()
+        except:
+            pass
+        return
+
     if choice == 'R':
+        new_custom = item.custom.copy()
+        stdscr.clear()
+        try:
+            stdscr.addstr(0, 0, "Edit Critical Stock Threshold")
+        except:
+            pass
+        curr = new_custom.get('critical_stock', 3)
+        try:
+            val = get_input(stdscr, f"Critical stock threshold [{curr}]: ", 2, 0, 5, str(curr))
+            if val.strip():
+                new_custom['critical_stock'] = int(val)
+        except:
+            pass
+        inventory[orig_idx] = Item(
+            name=item.name, quantity=item.quantity, cost=item.cost,
+            min_value=item.min_value, max_value=item.max_value, sale=item.sale,
+            location=item.location, description=item.description,
+            timestamp=item.timestamp,
+            **new_custom
+        )
+        safe_save_inventory(inventory)
+        try:
+            stdscr.addstr(4, 0, "Threshold updated. Press any key...")
+            stdscr.refresh()
+            stdscr.getch()
+        except:
+            pass
+        return
+
+    crit_choice = 15 + len(CUSTOM_FIELDS)
+    if choice == crit_choice:
         new_custom = item.custom.copy()
         stdscr.clear()
         try:
@@ -2773,63 +2848,68 @@ def edit_item(stdscr, inventory, orig_idx):
         except curses.error:
             return default_val
 
-    if choice in (1, 9):
+    if choice in (1, 8):
         new_name = safe_input("Name", new_name, y, 60)
         y += 1
 
-    if choice in (2, 9):
+    if choice in (2, 8):
         new_qty_str = safe_input("Quantity", new_qty, y, 10)
         try: new_qty = int(new_qty_str)
         except: pass
         y += 1
 
-    if choice in (3, 9):
+    if choice in (3, 8):
         new_cost_str = safe_input("Cost ($)", f"{new_cost:.2f}", y, 12)
         try: new_cost = float(new_cost_str)
         except: pass
         y += 1
 
-    if choice in (4, 9):
+    if choice in (4, 8):
         new_location = safe_input("Location", new_location, y, 60)
         y += 1
 
-    if choice in (5, 9):
+    if choice in (5, 8):
         new_desc = safe_input("Description", new_desc, y, 60)
         y += 1
 
-    if choice in (6, 9):
+    if choice in (6, 8):
         new_min_str = safe_input("Min value ($)", f"{new_min:.2f}", y, 12)
         try: new_min = float(new_min_str)
         except: pass
         y += 1
 
-    if choice in (7, 9):
+    if choice in (7, 8):
         new_max_str = safe_input("Max value ($)", f"{new_max:.2f}", y, 12)
         try: new_max = float(new_max_str)
         except: pass
         y += 1
 
-    if choice in (8, 9):
+    sale_choice = 13 + len(CUSTOM_FIELDS)
+    if choice in (sale_choice, 8):
         new_sale_str = safe_input("Sale ($)", f"{new_sale:.2f}", y, 12)
         try: new_sale = float(new_sale_str)
         except: pass
         y += 1
 
-    if choice in (10, 9):
+    part_choice = 9 + len(CUSTOM_FIELDS)
+    if choice in (part_choice, 8):
         new_part_number = safe_input("Part#", item.part_number, y, 60)
         y += 1
 
-    if choice in (11, 9):
+    upc_choice = 10 + len(CUSTOM_FIELDS)
+    if choice in (upc_choice, 8):
         new_upc_str = safe_input("UPC", str(item.upc), y, 20)
         try: new_upc = int(new_upc_str)
         except: pass
         y += 1
 
-    if choice in (12, 9):
+    po_choice = 11 + len(CUSTOM_FIELDS)
+    if choice in (po_choice, 8):
         new_po = safe_input("PO", item.po, y, 40)
         y += 1
 
-    if choice in (13, 9):
+    date_choice = 12 + len(CUSTOM_FIELDS)
+    if choice in (date_choice, 8):
         stdscr.addstr(y, 0, f"Edit Date")
         stdscr.addstr(y + 1, 0, f"Current: {new_date}")
         val = get_date_input(stdscr, "", y + 2, 0)
@@ -2839,8 +2919,8 @@ def edit_item(stdscr, inventory, orig_idx):
 
     # Custom fields section
     new_custom = item.custom.copy()
-    all_fields_choice = 13 + len(CUSTOM_FIELDS)
-    if choice == 9 or choice == all_fields_choice:
+    all_fields_choice = 8 + len(CUSTOM_FIELDS)
+    if choice == 8 or choice == all_fields_choice:
         y += 2
         try:
             stdscr.addnstr(y-1, 0, "-" * min(40, w-1), w-1)
