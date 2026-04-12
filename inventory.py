@@ -187,7 +187,7 @@ def load_config():
         THEME_COLOR = curses.COLOR_CYAN
 
 def save_config(include_theme=True):
-    global PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS, SALE_ENABLED, DATE_FORMAT
+    global CUSTOM_FIELDS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS, SALE_ENABLED, DATE_FORMAT
     with CONFIG_FILE.open('w', encoding='utf-8') as f:
         color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
         if include_theme:
@@ -1348,7 +1348,7 @@ def about_menu(stdscr):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def config_menu(stdscr, inventory=None):
-    global CUSTOM_FIELDS, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, SALE_ENABLED, DATE_FORMAT
+    global CUSTOM_FIELDS, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, SALE_ENABLED, DATE_FORMAT, INPUT_FIELDS, COLUMNS
 
     load_config()
     stdscr.keypad(1)
@@ -1425,14 +1425,19 @@ def config_menu(stdscr, inventory=None):
                         break
                     line = f"{i+1}. {f['label']} ({f['type']})"
                     try:
-                        stdscr.addnstr(y, 2, line, w-3)
+                        if i == current_option:
+                            stdscr.attron(curses.color_pair(1))
+                            stdscr.addnstr(y, 2, ">" + line, w-3)
+                            stdscr.attroff(curses.color_pair(1))
+                        else:
+                            stdscr.addnstr(y, 2, " " + line, w-3)
                     except curses.error:
                         pass
                     y += 1
 
             y += 1
             try:
-                stdscr.addstr(y, 2, f"[{len(CUSTOM_FIELDS)}/5]  a:add  #:del  e:edit")
+                stdscr.addstr(y, 2, f"[{len(CUSTOM_FIELDS)}/5]  a:add  d:del  e:edit")
             except curses.error:
                 pass
 
@@ -1512,7 +1517,7 @@ def config_menu(stdscr, inventory=None):
         elif current_tab == 0 and key == curses.KEY_UP:
             current_option = max(0, current_option - 1)
         elif current_tab == 0 and key == curses.KEY_DOWN:
-            current_option = min(len(CUSTOM_FIELDS), current_option + 1)
+            current_option = min(max(0, len(CUSTOM_FIELDS) - 1), current_option + 1)
         elif current_tab == 2 and key == curses.KEY_UP:
             current_option = (current_option - 1) % 11
         elif current_tab == 2 and key == curses.KEY_DOWN:
@@ -1669,16 +1674,8 @@ def config_menu(stdscr, inventory=None):
                 except curses.error:
                     pass
         elif current_tab == 0 and key == ord('e'):
-            stdscr.addstr(y+4, 2, "Edit which field? (1-" + str(len(CUSTOM_FIELDS)) + "): ")
-            stdscr.refresh()
-            curses.echo()
-            try:
-                cmd = stdscr.getstr(y+4, 33, 2).decode('utf-8').strip()
-            except:
-                cmd = ""
-            curses.noecho()
-            if cmd.isdigit() and 1 <= int(cmd) <= len(CUSTOM_FIELDS):
-                idx = int(cmd) - 1
+            if current_tab == 0 and 0 <= current_option < len(CUSTOM_FIELDS):
+                idx = current_option
                 field = CUSTOM_FIELDS[idx]
                 old_label = field['label']
                 field_type = field.get('type', 'text')
@@ -1778,11 +1775,10 @@ def config_menu(stdscr, inventory=None):
                                 deleted_opt = options.pop(int(del_cmd) - 1)
                                 field['options'] = options
                                 save_config()
-        elif current_tab == 0 and 48 <= key <= 57:
-            cmd = chr(key)
-            if cmd.isdigit() and 1 <= int(cmd) <= len(CUSTOM_FIELDS):
+        elif current_tab == 0 and key == ord('d'):
+            if 0 <= current_option < len(CUSTOM_FIELDS):
+                idx = current_option
                 try:
-                    idx = int(cmd) - 1
                     removed_key = CUSTOM_FIELDS[idx]['name']
                     removed_label = CUSTOM_FIELDS[idx]['label']
                     prompt_text = f"Delete '{removed_label}'? This will delete all data collected for this field. (y/n): "
@@ -1799,6 +1795,7 @@ def config_menu(stdscr, inventory=None):
                         INPUT_FIELDS = [f for f in INPUT_FIELDS if f != f"custom_{removed_key}"]
                         COLUMNS = [c for c in COLUMNS if c['key'] != f"custom_{removed_key}"]
                         save_config()
+                        current_option = max(0, min(current_option, len(CUSTOM_FIELDS) - 1)) if CUSTOM_FIELDS else 0
                         if inventory is not None:
                             for item in inventory:
                                 item.custom.pop(removed_key, None)
