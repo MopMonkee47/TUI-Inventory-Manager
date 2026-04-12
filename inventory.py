@@ -2404,7 +2404,7 @@ def select_field_to_edit(stdscr, item):
         if typed_input:
             draw_footer(stdscr, f"Enter → {typed_input}")
         else:
-            draw_footer(stdscr, "↑↓:select  Enter:confirm  type:number or L/C/R  q:back")
+            draw_footer(stdscr, "↑↓:select  Enter:confirm  type:number  q:back")
 
         stdscr.refresh()
         key = stdscr.getch()
@@ -2443,8 +2443,6 @@ def select_field_to_edit(stdscr, item):
                 typed_input = typed_input[:-1]
         elif 48 <= key <= 57:
             typed_input += chr(key)
-        elif key in (ord('L'), ord('l'), ord('C'), ord('c'), ord('R'), ord('r')):
-            typed_input = chr(key).upper()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Hardened edit_item
@@ -2683,36 +2681,6 @@ def edit_item(stdscr, inventory, orig_idx):
             pass
         return
 
-    if choice == 'L':
-        new_custom = item.custom.copy()
-        stdscr.clear()
-        try:
-            stdscr.addstr(0, 0, "Edit Low Stock Threshold")
-        except:
-            pass
-        curr = new_custom.get('low_stock_threshold', 5)
-        try:
-            val = get_input(stdscr, f"Low stock threshold [{curr}]: ", 2, 0, 5, str(curr))
-            if val.strip():
-                new_custom['low_stock_threshold'] = int(val)
-        except:
-            pass
-        inventory[orig_idx] = Item(
-            name=item.name, quantity=item.quantity, cost=item.cost,
-            min_value=item.min_value, max_value=item.max_value, sale=item.sale,
-            location=item.location, description=item.description,
-            timestamp=item.timestamp,
-            **new_custom
-        )
-        safe_save_inventory(inventory)
-        try:
-            stdscr.addstr(4, 0, "Threshold updated. Press any key...")
-            stdscr.refresh()
-            stdscr.getch()
-        except:
-            pass
-        return
-
     low_choice = 14 + len(CUSTOM_FIELDS)
     if choice == low_choice:
         new_custom = item.custom.copy()
@@ -2726,36 +2694,6 @@ def edit_item(stdscr, inventory, orig_idx):
             val = get_input(stdscr, f"Low stock threshold [{curr}]: ", 2, 0, 5, str(curr))
             if val.strip():
                 new_custom['low_stock_threshold'] = int(val)
-        except:
-            pass
-        inventory[orig_idx] = Item(
-            name=item.name, quantity=item.quantity, cost=item.cost,
-            min_value=item.min_value, max_value=item.max_value, sale=item.sale,
-            location=item.location, description=item.description,
-            timestamp=item.timestamp,
-            **new_custom
-        )
-        safe_save_inventory(inventory)
-        try:
-            stdscr.addstr(4, 0, "Threshold updated. Press any key...")
-            stdscr.refresh()
-            stdscr.getch()
-        except:
-            pass
-        return
-
-    if choice == 'R':
-        new_custom = item.custom.copy()
-        stdscr.clear()
-        try:
-            stdscr.addstr(0, 0, "Edit Critical Stock Threshold")
-        except:
-            pass
-        curr = new_custom.get('critical_stock', 3)
-        try:
-            val = get_input(stdscr, f"Critical stock threshold [{curr}]: ", 2, 0, 5, str(curr))
-            if val.strip():
-                new_custom['critical_stock'] = int(val)
         except:
             pass
         inventory[orig_idx] = Item(
