@@ -2404,7 +2404,7 @@ def select_field_to_edit(stdscr, item):
         if typed_input:
             draw_footer(stdscr, f"Enter → {typed_input}")
         else:
-            draw_footer(stdscr, "↑↓:select  Enter:confirm  type:number  q:back")
+            draw_footer(stdscr, "↑↓:select  Enter: confirm  q: back")
 
         stdscr.refresh()
         key = stdscr.getch()
