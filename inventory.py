@@ -3481,7 +3481,7 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
 
     stats = f"Items:{total_items}"
     sale_control = "r:sale " if SALE_ENABLED else ""
-    controls = f"q:quit a:add e:edit d:delete {sale_control}h:history c:configure PgUp/PgDn:scroll ENTER:details"
+    controls = f"q:quit a:add e:edit d:delete {sale_control}h:history c:configure ↑↓:navigate ENTER:details"
     footer = f"{stats} | {controls}"
     draw_footer(stdscr, footer)
 
@@ -3510,6 +3510,300 @@ def check_size(stdscr):
         return False
     return True
 
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Split-screen view
+# ──────────────────────────────────────────────────────────────────────────────
+def draw_split_screen(stdscr, selected_row_idx, inventory, search_term="", sort_key="name", sort_directions=None, scroll_offset=0, column_filter=None):
+    """Draw split-screen view: item list on left (60%), item details on right (40%)"""
+    global COLUMNS, AVAILABLE_COLUMNS, CUSTOM_FIELDS
+    load_config()
+    if sort_directions is None:
+        sort_directions = {"name": 1, "quantity": 1, "location": 1}
+    if column_filter is None:
+        column_filter = {}
+
+    stdscr.clear()
+    h, w = stdscr.getmaxyx()
+
+    # If terminal too narrow for split-screen, fall back to normal view
+    if w < 50:
+        return draw_menu(stdscr, selected_row_idx, inventory, search_term, sort_key, sort_directions, scroll_offset, column_filter)
+
+    # Calculate split: 60% list, 40% details
+    list_width = int(w * 0.6)
+    details_width = w - list_width - 1  # -1 for separator
+
+    # Ensure minimum widths
+    if list_width < 30:
+        list_width = 30
+        details_width = w - list_width - 1
+    if details_width < 20:
+        details_width = 20
+        list_width = w - details_width - 1
+
+    term = search_term.lower()
+    filtered = [item for item in inventory if (not HIDE_ZERO_QTY_ENABLED or item.quantity > 0) and (term in item.name.lower() or term in item.description.lower() or term in item.location.lower() or term in item.part_number.lower())]
+
+    for col_key, filter_val in column_filter.items():
+        if col_key.startswith("custom_"):
+            field_name = col_key[7:]
+            filtered = [item for item in filtered if item.custom.get(field_name, "") == filter_val]
+        elif col_key == "location":
+            filtered = [item for item in filtered if item.location == filter_val]
+        elif col_key == "po":
+            filtered = [item for item in filtered if item.po == filter_val]
+        elif col_key == "date":
+            filtered = [item for item in filtered if item.date == filter_val]
+
+    direction = sort_directions.get(sort_key, 1)
+
+    def get_sort_value(item):
+        if sort_key == "name":
+            return item.name.lower()
+        elif sort_key == "quantity":
+            return item.quantity
+        elif sort_key == "location":
+            return item.location.lower()
+        elif sort_key == "cost":
+            return item.cost
+        elif sort_key == "description":
+            return item.description.lower()
+        elif sort_key == "min_value":
+            return item.min_value
+        elif sort_key == "max_value":
+            return item.max_value
+        elif sort_key == "sale":
+            return item.sale
+        elif sort_key == "timestamp":
+            return item.timestamp
+        elif sort_key == "part_number":
+            return item.part_number.lower()
+        elif sort_key == "upc":
+            return item.upc
+        elif sort_key == "po":
+            return item.po.lower()
+        elif sort_key == "date":
+            return item.date
+        elif sort_key.startswith("custom_"):
+            val = item.custom.get(sort_key[7:], "")
+            if isinstance(val, (int, float)):
+                return val
+            return str(val).lower()
+        return ''
+
+    filtered.sort(key=get_sort_value, reverse=(direction < 0))
+
+    original_indices = [inventory.index(item) for item in filtered]
+
+    # Draw LEFT PANE (Item List)
+    stdscr.attron(curses.color_pair(1))
+    stdscr.addstr(0, 0, PROGRAM_NAME.center(min(list_width, 100)))
+    stdscr.attroff(curses.color_pair(1))
+    stdscr.addstr(1, 0, "")
+
+    dir_symbol = "↓" if direction > 0 else "↑"
+
+    filter_str = ""
+    if column_filter:
+        for col_key, val in column_filter.items():
+            if col_key.startswith("custom_"):
+                field_name = col_key[7:]
+                for field in CUSTOM_FIELDS:
+                    if field["name"] == field_name:
+                        label = field.get("label", field_name)
+                        break
+                else:
+                    label = col_key
+            else:
+                label = AVAILABLE_COLUMNS.get(col_key, {}).get("label", col_key)
+            filter_str = f"{label}={val}"
+            break
+
+    stdscr.addstr(2, 0, f"Search: {search_term or '(none)'}   Filter: {filter_str or '(none)'}   Sort: {sort_key} {dir_symbol}   (s:search f:filter #:sort ESC:clear)")
+
+    stdscr.addstr(3, 0, "─" * min(w, 100))
+    stdscr.addstr(4, 0, "")
+
+    # Header for list pane
+    header_parts = []
+    for idx, col in enumerate(COLUMNS):
+        key = col["key"]
+        if key.startswith("custom_"):
+            label = col.get("label")
+            if not label:
+                for field in CUSTOM_FIELDS:
+                    if "custom_" + field["name"] == key:
+                        label = field["label"]
+                        break
+            if not label:
+                label = key
+        else:
+            label = AVAILABLE_COLUMNS[key]["label"]
+        label = f"{label}({idx + 1})"
+        width = col["width"]
+        align = col.get("align", "left")
+        if align == "right":
+            header_parts.append(label.rjust(width))
+        elif align == "center":
+            header_parts.append(label.center(width))
+        else:
+            header_parts.append(label.ljust(width))
+    headers = "  ".join(header_parts)
+    stdscr.addstr(5, 0, headers[:list_width])
+    header_dashes = "  ".join([col["width"] * "-" for col in COLUMNS])
+    stdscr.addstr(6, 0, header_dashes[:list_width])
+
+    # Draw list items
+    for idx, item in enumerate(filtered):
+        if idx < scroll_offset:
+            continue
+        y = idx - scroll_offset + 7
+        if y >= h - 3:
+            break
+
+        row_parts = []
+        for col in COLUMNS:
+            key = col["key"]
+            width = col["width"]
+            align = col.get("align", "left")
+            if key.startswith("custom_"):
+                value = item.custom.get(key[7:], "")
+            else:
+                value = getattr(item, key, "")
+            if value is None:
+                value = ""
+
+            if key == "quantity":
+                disp = f"{value:,}"
+            elif key in ("cost", "min_value", "max_value", "sale"):
+                disp = f"${value:,.2f}"
+            else:
+                disp = str(value)
+
+            if len(disp) >= width - 1:
+                disp = disp[:width - 2] + "…"
+
+            if align == "right":
+                row_parts.append(disp.rjust(width))
+            elif align == "center":
+                row_parts.append(disp.center(width))
+            else:
+                row_parts.append(disp.ljust(width))
+
+        line = "  ".join(row_parts)
+
+        color_pair = 0
+        if COLOR_CRITICAL_ENABLED:
+            if item.stock_status == "critical":
+                color_pair = 3
+            elif item.stock_status == "low":
+                color_pair = 2
+
+        if color_pair:
+            stdscr.attron(curses.color_pair(color_pair))
+        if idx == selected_row_idx:
+            stdscr.attron(curses.A_REVERSE | curses.color_pair(1))
+
+        try:
+            stdscr.addnstr(y, 0, line, list_width - 1)
+        except curses.error:
+            pass
+
+        if idx == selected_row_idx:
+            stdscr.attroff(curses.A_REVERSE | curses.color_pair(1))
+        if color_pair:
+            stdscr.attroff(curses.color_pair(color_pair))
+
+    # Draw separator line (skip top header rows 0-4)
+    for row in range(5, h):
+        try:
+            stdscr.addch(row, list_width, "│")
+        except curses.error:
+            pass
+
+    # Draw RIGHT PANE (Item Details)
+    if filtered and 0 <= selected_row_idx < len(filtered):
+        item = filtered[selected_row_idx]
+        orig_idx = original_indices[selected_row_idx]
+
+        # Details header
+        stdscr.addstr(5, list_width + 1, "Item Details".center(details_width))
+
+        detail_y = 7
+        # Basic info
+        stdscr.addstr(detail_y, list_width + 2, f"Name: {item.name}")
+        detail_y += 1
+        stdscr.addstr(detail_y, list_width + 2, f"Part #: {item.part_number or '(none)'}")
+        detail_y += 1
+        stdscr.addstr(detail_y, list_width + 2, f"UPC: {item.upc or '(none)'}")
+        detail_y += 1
+        stdscr.addstr(detail_y, list_width + 2, f"Description: {item.description or '(none)'}")
+        detail_y += 1
+        stdscr.addstr(detail_y, list_width + 2, f"Location: {item.location}")
+        detail_y += 1
+        stdscr.addstr(detail_y, list_width + 2, f"Quantity: {item.quantity:,}")
+        detail_y += 1
+
+        if MONETIZATION_ENABLED:
+            stdscr.addstr(detail_y, list_width + 2, f"Cost: ${item.cost:,.2f}")
+            detail_y += 1
+            stdscr.addstr(detail_y, list_width + 2, f"Price: ${item.sale:,.2f}")
+            detail_y += 1
+            stdscr.addstr(detail_y, list_width + 2, f"Min Value: ${item.min_value:,.2f}")
+            detail_y += 1
+            stdscr.addstr(detail_y, list_width + 2, f"Max Value: ${item.max_value:,.2f}")
+            detail_y += 1
+
+        if PO_ENABLED:
+            stdscr.addstr(detail_y, list_width + 2, f"PO #: {item.po or '(none)'}")
+            detail_y += 1
+
+        stdscr.addstr(detail_y, list_width + 2, f"Date Added: {item.date}")
+        detail_y += 1
+
+        # Custom fields
+        if item.custom:
+            detail_y += 1
+            stdscr.addstr(detail_y, list_width + 2, "Custom Fields:")
+            detail_y += 1
+            for field in CUSTOM_FIELDS:
+                key = field["name"]
+                value = item.custom.get(key, "")
+                if value:
+                    label = field.get("label", key)
+                    stdscr.addstr(detail_y, list_width + 4, f"{label}: {value}")
+                    detail_y += 1
+
+        # Status indicators
+        detail_y += 1
+        if COLOR_CRITICAL_ENABLED:
+            status = item.stock_status.upper()
+            if status == "CRITICAL":
+                stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
+                stdscr.addstr(detail_y, list_width + 2, f"STOCK STATUS: {status}")
+                stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
+            elif status == "LOW":
+                stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
+                stdscr.addstr(detail_y, list_width + 2, f"STOCK STATUS: {status}")
+                stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
+            else:
+                stdscr.addstr(detail_y, list_width + 2, f"STOCK STATUS: OK")
+
+    else:
+        # No items or no selection
+        stdscr.addstr(5, list_width + 2, "No items to display")
+
+    # Full-width footer (same format as draw_menu)
+    total_items = len(filtered)
+    stats = f"Items:{total_items}"
+    sale_control = "r:sale " if SALE_ENABLED else ""
+    controls = f"q:quit a:add e:edit d:delete {sale_control}h:history c:configure ↑↓:navigate ENTER:details"
+    footer = f"{stats} | {controls}"
+    draw_footer(stdscr, footer)
+
+    return filtered, original_indices, scroll_offset
 # ──────────────────────────────────────────────────────────────────────────────
 # Main loop
 # ──────────────────────────────────────────────────────────────────────────────
@@ -3673,6 +3967,8 @@ def main(stdscr):
     search_term = ""
     column_filter = {}
     sort_key = 'name'
+    split_screen_mode = False  # Track split-screen state
+
     sort_directions = {'name': 1, 'quantity': 1, 'location': 1}
     scroll_offset = 0
 
@@ -3688,13 +3984,22 @@ def main(stdscr):
             stdscr.clear()
             stdscr.refresh()
             continue
-
         # ── Draw the current state (this is what the user sees right now) ──
         h, w = stdscr.getmaxyx()
-        filtered, original_indices, scroll_offset = draw_menu(
-            stdscr, selected_row_idx, inventory,
-            search_term, sort_key, sort_directions, scroll_offset, column_filter
-        )
+        if split_screen_mode:
+            filtered, original_indices, scroll_offset = draw_split_screen(
+                stdscr, selected_row_idx, inventory,
+                search_term, sort_key, sort_directions, scroll_offset, column_filter
+            )
+        else:
+            filtered, original_indices, scroll_offset = draw_menu(
+                stdscr, selected_row_idx, inventory,
+                search_term, sort_key, sort_directions, scroll_offset, column_filter
+            )
+        filtered_len = len(filtered)
+        visible_lines = h - 10
+        max_scroll = max(0, filtered_len - visible_lines)
+
         filtered_len = len(filtered)
         visible_lines = h - 10
         max_scroll = max(0, filtered_len - visible_lines)
@@ -3730,6 +4035,10 @@ def main(stdscr):
             if scroll_offset < max_scroll:
                 scroll_offset = min(max_scroll, scroll_offset + visible_lines)
                 selected_row_idx = min(filtered_len - 1, selected_row_idx + visible_lines)
+        elif key == 22:  # CTRL+v
+            split_screen_mode = not split_screen_mode
+            scroll_offset = 0  # Reset scroll when toggling
+
 
         elif key == ord('q'):
             break
