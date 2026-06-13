@@ -3729,51 +3729,96 @@ def draw_split_screen(stdscr, selected_row_idx, inventory, search_term="", sort_
         orig_idx = original_indices[selected_row_idx]
 
         # Details header
-        stdscr.addstr(5, list_width + 1, "Item Details".center(details_width))
+        try:
+            stdscr.addstr(5, list_width + 1, "Item Details".center(details_width))
+        except curses.error:
+            pass
 
         detail_y = 7
         # Basic info
-        stdscr.addstr(detail_y, list_width + 2, f"Name: {item.name}")
+        try:
+            stdscr.addstr(detail_y, list_width + 2, f"Name: {item.name}")
+        except curses.error:
+            pass
         detail_y += 1
-        stdscr.addstr(detail_y, list_width + 2, f"Part #: {item.part_number or '(none)'}")
+        try:
+            stdscr.addstr(detail_y, list_width + 2, f"Part #: {item.part_number or '(none)'}")
+        except curses.error:
+            pass
         detail_y += 1
-        stdscr.addstr(detail_y, list_width + 2, f"UPC: {item.upc or '(none)'}")
+        try:
+            stdscr.addstr(detail_y, list_width + 2, f"UPC: {item.upc or '(none)'}")
+        except curses.error:
+            pass
         detail_y += 1
-        stdscr.addstr(detail_y, list_width + 2, f"Description: {item.description or '(none)'}")
+        try:
+            stdscr.addstr(detail_y, list_width + 2, f"Description: {item.description or '(none)'}")
+        except curses.error:
+            pass
         detail_y += 1
-        stdscr.addstr(detail_y, list_width + 2, f"Location: {item.location}")
+        try:
+            stdscr.addstr(detail_y, list_width + 2, f"Location: {item.location}")
+        except curses.error:
+            pass
         detail_y += 1
-        stdscr.addstr(detail_y, list_width + 2, f"Quantity: {item.quantity:,}")
+        try:
+            stdscr.addstr(detail_y, list_width + 2, f"Quantity: {item.quantity:,}")
+        except curses.error:
+            pass
         detail_y += 1
 
         if MONETIZATION_ENABLED:
-            stdscr.addstr(detail_y, list_width + 2, f"Cost: ${item.cost:,.2f}")
+            try:
+                stdscr.addstr(detail_y, list_width + 2, f"Cost: ${item.cost:,.2f}")
+            except curses.error:
+                pass
             detail_y += 1
-            stdscr.addstr(detail_y, list_width + 2, f"Price: ${item.sale:,.2f}")
+            try:
+                stdscr.addstr(detail_y, list_width + 2, f"Price: ${item.sale:,.2f}")
+            except curses.error:
+                pass
             detail_y += 1
-            stdscr.addstr(detail_y, list_width + 2, f"Min Value: ${item.min_value:,.2f}")
+            try:
+                stdscr.addstr(detail_y, list_width + 2, f"Min Value: ${item.min_value:,.2f}")
+            except curses.error:
+                pass
             detail_y += 1
-            stdscr.addstr(detail_y, list_width + 2, f"Max Value: ${item.max_value:,.2f}")
+            try:
+                stdscr.addstr(detail_y, list_width + 2, f"Max Value: ${item.max_value:,.2f}")
+            except curses.error:
+                pass
             detail_y += 1
 
         if PO_ENABLED:
-            stdscr.addstr(detail_y, list_width + 2, f"PO #: {item.po or '(none)'}")
+            try:
+                stdscr.addstr(detail_y, list_width + 2, f"PO #: {item.po or '(none)'}")
+            except curses.error:
+                pass
             detail_y += 1
 
-        stdscr.addstr(detail_y, list_width + 2, f"Date Added: {item.date}")
+        try:
+            stdscr.addstr(detail_y, list_width + 2, f"Date Added: {item.date}")
+        except curses.error:
+            pass
         detail_y += 1
 
         # Custom fields
         if item.custom:
             detail_y += 1
-            stdscr.addstr(detail_y, list_width + 2, "Custom Fields:")
+            try:
+                stdscr.addstr(detail_y, list_width + 2, "Custom Fields:")
+            except curses.error:
+                pass
             detail_y += 1
             for field in CUSTOM_FIELDS:
                 key = field["name"]
                 value = item.custom.get(key, "")
                 if value:
                     label = field.get("label", key)
-                    stdscr.addstr(detail_y, list_width + 4, f"{label}: {value}")
+                    try:
+                        stdscr.addstr(detail_y, list_width + 4, f"{label}: {value}")
+                    except curses.error:
+                        pass
                     detail_y += 1
 
         # Status indicators
@@ -3782,18 +3827,30 @@ def draw_split_screen(stdscr, selected_row_idx, inventory, search_term="", sort_
             status = item.stock_status.upper()
             if status == "CRITICAL":
                 stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
-                stdscr.addstr(detail_y, list_width + 2, f"STOCK STATUS: {status}")
+                try:
+                    stdscr.addstr(detail_y, list_width + 2, f"STOCK STATUS: {status}")
+                except curses.error:
+                    pass
                 stdscr.attroff(curses.color_pair(3) | curses.A_BOLD)
             elif status == "LOW":
                 stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
-                stdscr.addstr(detail_y, list_width + 2, f"STOCK STATUS: {status}")
+                try:
+                    stdscr.addstr(detail_y, list_width + 2, f"STOCK STATUS: {status}")
+                except curses.error:
+                    pass
                 stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
             else:
-                stdscr.addstr(detail_y, list_width + 2, f"STOCK STATUS: OK")
+                try:
+                    stdscr.addstr(detail_y, list_width + 2, f"STOCK STATUS: OK")
+                except curses.error:
+                    pass
 
     else:
         # No items or no selection
-        stdscr.addstr(5, list_width + 2, "No items to display")
+        try:
+            stdscr.addstr(5, list_width + 2, "No items to display")
+        except curses.error:
+            pass
 
     # Full-width footer (same format as draw_menu)
     total_items = len(filtered)
@@ -4005,7 +4062,10 @@ def main(stdscr):
         max_scroll = max(0, filtered_len - visible_lines)
 
         # ── Wait for user input ────────────────────────────────────────────
-        key = stdscr.getch()
+        try:
+            key = stdscr.getch()
+        except KeyboardInterrupt:
+            continue
 
         # ── Handle special resize event first ──────────────────────────────
         if key == curses.KEY_RESIZE:
