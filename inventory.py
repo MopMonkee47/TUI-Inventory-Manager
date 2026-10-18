@@ -21,13 +21,30 @@ from pathlib import Path
 from datetime import datetime
 
 # Paths
+# SCRIPT_DIR is the app root (where this script lives). Per-inventory data files
+# live in DATA_DIR, which is repointed by set_data_dir() when an inventory is
+# selected from the manager.
 SCRIPT_DIR  = Path(__file__).parent.resolve()
-DB_FILE     = SCRIPT_DIR / "inventory.db"
-BACKUP_FILE = SCRIPT_DIR / "inventory.db.bak"
-SALES_LOG   = SCRIPT_DIR / "inventory_sales.log"
-CONFIG_FILE = SCRIPT_DIR / "inventory_config.json"
-ABOUT_FILE  = SCRIPT_DIR / "About"
-ABOUT_DEFAULT_FILE = SCRIPT_DIR / "AboutDefault"
+DATA_DIR    = SCRIPT_DIR
+DB_FILE     = DATA_DIR / "inventory.db"
+BACKUP_FILE = DATA_DIR / "inventory.db.bak"
+SALES_LOG   = DATA_DIR / "inventory_sales.log"
+CONFIG_FILE = DATA_DIR / "inventory_config.json"
+ABOUT_FILE  = DATA_DIR / "About"
+ABOUT_DEFAULT_FILE = DATA_DIR / "AboutDefault"
+
+MANAGER_CONFIG_FILE = SCRIPT_DIR / "manager_config.json"
+
+def set_data_dir(folder):
+    """Repoint all inventory data-file paths at a chosen inventory folder."""
+    global DATA_DIR, DB_FILE, BACKUP_FILE, SALES_LOG, CONFIG_FILE, ABOUT_FILE, ABOUT_DEFAULT_FILE
+    DATA_DIR    = Path(folder).resolve()
+    DB_FILE     = DATA_DIR / "inventory.db"
+    BACKUP_FILE = DATA_DIR / "inventory.db.bak"
+    SALES_LOG   = DATA_DIR / "inventory_sales.log"
+    CONFIG_FILE = DATA_DIR / "inventory_config.json"
+    ABOUT_FILE  = DATA_DIR / "About"
+    ABOUT_DEFAULT_FILE = DATA_DIR / "AboutDefault"
 
 # Display settings
 NAME_W     = 24
@@ -87,9 +104,10 @@ HIDE_ZERO_QTY_ENABLED = True
 AUTO_DELETE_ZERO_ENABLED = False
 SALE_ENABLED = True
 DATE_FORMAT = "%m/%d/%Y"
+SPLASH_ENABLED = True
 
 # Global custom fields
-CUSTOM_FIELDS = []  # [{'name':str, 'label':str, 'type':'text'|'number'|'decimal'|'money'}, ...]
+CUSTOM_FIELDS = []  # [{'name':str, 'label':str, 'type':'text'|'number'|'decimal'|'money'|'date'|'list', 'decimals':int?}, ...]
 
 # Input customization - which fields to prompt for when adding an item
 INPUT_FIELDS = ['name', 'quantity', 'description', 'location', 'cost']
@@ -134,6 +152,109 @@ THEME_COLOR_PAIRS = {
 }
 THEME_COLOR = curses.COLOR_CYAN
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Manager (multi-inventory launcher) state
+# ──────────────────────────────────────────────────────────────────────────────
+
+MGR_PROGRAM_NAME = "TUI Inventories Manager"
+MGR_SUBTITLE     = "Select an inventory to manage"
+MGR_THEME_COLOR  = curses.COLOR_CYAN
+INVENTORIES      = []
+MGR_SELECTED_IDX = 0
+
+# Default configuration written when a new inventory folder is created.
+DEFAULT_CONFIG = {
+    "custom_fields": [],
+    "theme_color": "cyan",
+    "program_name": "New Inventory",
+    "subtitle": "Track your inventory",
+    "po_enabled": True,
+    "monetization_enabled": True,
+    "color_critical_enabled": True,
+    "delete_confirm_enabled": True,
+    "hide_zero_qty_enabled": True,
+    "auto_delete_zero_enabled": False,
+    "sale_enabled": True,
+    "date_format": "%m/%d/%Y",
+    "splash_enabled": True,
+    "columns": [
+        {"key": "name", "width": 24, "align": "left"},
+        {"key": "quantity", "width": 6, "align": "right"},
+        {"key": "cost", "width": 12, "align": "center"},
+        {"key": "location", "width": 10, "align": "left"},
+        {"key": "description", "width": 20, "align": "left"},
+    ],
+    "history_columns": [
+        {"key": "timestamp", "width": 10, "align": "left"},
+        {"key": "name", "width": 20, "align": "left"},
+        {"key": "quantity", "width": 4, "align": "right"},
+        {"key": "price", "width": 8, "align": "right"},
+        {"key": "total", "width": 10, "align": "right"},
+        {"key": "po", "width": 12, "align": "left"},
+    ],
+    "input_fields": ["name", "quantity", "description", "location", "cost"],
+}
+
+DEFAULT_ABOUT = (
+    "Welcome to your inventory.\n"
+    "\n"
+    "Edit this About page to describe what you are tracking.\n"
+)
+
+def apply_theme(color):
+    """Reinitialize the four standard color pairs for the given theme color."""
+    curses.init_pair(1, color, -1)
+    curses.init_pair(2, curses.COLOR_YELLOW, -1)
+    curses.init_pair(3, curses.COLOR_RED, -1)
+    curses.init_pair(4, curses.COLOR_GREEN, -1)
+
+def load_manager_config():
+    global MGR_PROGRAM_NAME, MGR_SUBTITLE, MGR_THEME_COLOR
+    if MANAGER_CONFIG_FILE.exists():
+        try:
+            with MANAGER_CONFIG_FILE.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            MGR_PROGRAM_NAME = data.get('program_name', MGR_PROGRAM_NAME)
+            MGR_SUBTITLE = data.get('subtitle', MGR_SUBTITLE)
+            MGR_THEME_COLOR = THEME_COLORS.get(data.get('theme_color', 'cyan'), curses.COLOR_CYAN)
+        except Exception:
+            pass
+
+def save_manager_config():
+    color_name = next((k for k, v in THEME_COLORS.items() if v == MGR_THEME_COLOR), 'cyan')
+    with MANAGER_CONFIG_FILE.open('w', encoding='utf-8') as f:
+        json.dump({
+            'program_name': MGR_PROGRAM_NAME,
+            'subtitle': MGR_SUBTITLE,
+            'theme_color': color_name,
+        }, f, indent=2)
+
+def scan_inventories():
+    """Return a sorted list of {'folder', 'name'} for each inventory folder."""
+    global INVENTORIES
+    INVENTORIES = []
+    try:
+        entries = sorted(SCRIPT_DIR.iterdir())
+    except Exception:
+        return INVENTORIES
+
+    for entry in entries:
+        if entry == SCRIPT_DIR or not entry.is_dir():
+            continue
+        config_json = entry / "inventory_config.json"
+        if not config_json.exists():
+            continue
+        try:
+            with config_json.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+            name = data.get('program_name') or entry.name
+        except Exception:
+            name = entry.name
+        INVENTORIES.append({'folder': entry, 'name': name})
+
+    INVENTORIES.sort(key=lambda x: x['name'].lower())
+    return INVENTORIES
+
 def draw_footer(stdscr, controls):
     h, w = stdscr.getmaxyx()
     try:
@@ -152,7 +273,7 @@ def draw_detail_line(stdscr, y, label, value, label_width):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def load_config():
-    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS, SALE_ENABLED, DATE_FORMAT
+    global CUSTOM_FIELDS, THEME_COLOR, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS, SALE_ENABLED, DATE_FORMAT, SPLASH_ENABLED
     if CONFIG_FILE.exists():
         try:
             with CONFIG_FILE.open('r', encoding='utf-8') as f:
@@ -170,6 +291,7 @@ def load_config():
                 AUTO_DELETE_ZERO_ENABLED = data.get('auto_delete_zero_enabled', False)
                 SALE_ENABLED = data.get('sale_enabled', True)
                 DATE_FORMAT = data.get('date_format', "%m/%d/%Y")
+                SPLASH_ENABLED = data.get('splash_enabled', True)
                 saved_cols = data.get('columns', None)
                 if saved_cols:
                     COLUMNS = saved_cols
@@ -187,13 +309,34 @@ def load_config():
         THEME_COLOR = curses.COLOR_CYAN
 
 def save_config(include_theme=True):
-    global CUSTOM_FIELDS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS, SALE_ENABLED, DATE_FORMAT
+    global CUSTOM_FIELDS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, COLUMNS, HISTORY_COLUMNS, INPUT_FIELDS, SALE_ENABLED, DATE_FORMAT, SPLASH_ENABLED
     with CONFIG_FILE.open('w', encoding='utf-8') as f:
         color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
         if include_theme:
-            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'color_critical_enabled': COLOR_CRITICAL_ENABLED, 'delete_confirm_enabled': DELETE_CONFIRM_ENABLED, 'hide_zero_qty_enabled': HIDE_ZERO_QTY_ENABLED, 'auto_delete_zero_enabled': AUTO_DELETE_ZERO_ENABLED, 'sale_enabled': SALE_ENABLED, 'date_format': DATE_FORMAT, 'columns': COLUMNS, 'history_columns': HISTORY_COLUMNS, 'input_fields': INPUT_FIELDS}, f, indent=2)
+            json.dump({'custom_fields': CUSTOM_FIELDS, 'theme_color': color_name, 'program_name': PROGRAM_NAME, 'subtitle': SUBTITLE, 'po_enabled': PO_ENABLED, 'monetization_enabled': MONETIZATION_ENABLED, 'color_critical_enabled': COLOR_CRITICAL_ENABLED, 'delete_confirm_enabled': DELETE_CONFIRM_ENABLED, 'hide_zero_qty_enabled': HIDE_ZERO_QTY_ENABLED, 'auto_delete_zero_enabled': AUTO_DELETE_ZERO_ENABLED, 'sale_enabled': SALE_ENABLED, 'date_format': DATE_FORMAT, 'splash_enabled': SPLASH_ENABLED, 'columns': COLUMNS, 'history_columns': HISTORY_COLUMNS, 'input_fields': INPUT_FIELDS}, f, indent=2)
         else:
             json.dump({'custom_fields': CUSTOM_FIELDS}, f, indent=2)
+
+def _fmt_custom(value, field):
+    """Format a custom-field value by type: money $x.xx, decimal N places, number commas."""
+    t = field.get('type')
+    if t == 'money' and isinstance(value, (int, float)):
+        return f"${value:,.2f}"
+    if t == 'decimal' and isinstance(value, (int, float)):
+        return f"{value:,.{field.get('decimals', 2)}f}"
+    if t == 'number' and isinstance(value, (int, float)):
+        if isinstance(value, float) and value.is_integer():
+            return f"{int(value):,}"
+        return f"{value:,}"
+    return str(value)
+
+def _round_custom(value, field):
+    """Round a numeric custom-field value to the field's stored precision."""
+    if field.get('type') == 'decimal':
+        return round(value, field.get('decimals', 2))
+    if field.get('type') == 'money':
+        return round(value, 2)
+    return value
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Item model
@@ -628,9 +771,9 @@ def view_sales_history(stdscr):
                 y += 1
 
             if search_term:
-                draw_footer(stdscr, "ESC/b:clear search  q: back")
+                draw_footer(stdscr, "ESC/b: clear search")
             else:
-                draw_footer(stdscr, "q: back")
+                draw_footer(stdscr, "ESC/b: back")
         except Exception as e:
             try:
                 stdscr.addstr(2, 0, f"Error reading sales log: {str(e)[:60]}")
@@ -651,8 +794,6 @@ def view_sales_history(stdscr):
             search_term = search_mode(stdscr)
         elif key == ord('b') and search_term:
             search_term = ""
-        elif key == ord('q'):
-            break
         elif key in (10, curses.KEY_ENTER, ord('b')):
             break
         elif key in (ord('n'), ord('t'), ord('$')):
@@ -858,7 +999,7 @@ def column_config_menu(stdscr):
         
         try:
             stdscr.addstr(h-4, 0, "·" * min(w, 80))
-            stdscr.addstr(h-3, 2, "↑↓: navigate  Enter: toggle  +/-: width  a: align  d: default  q: back")
+            stdscr.addstr(h-3, 2, "↑↓: navigate  Enter: toggle  +/-: width  a: align  d: default  Esc/b: back")
             stdscr.addstr(h-2, 2, "(width 1-60)")
         except curses.error:
             pass
@@ -866,7 +1007,7 @@ def column_config_menu(stdscr):
         stdscr.refresh()
         key = stdscr.getch()
         
-        if key == ord('q'):
+        if key in (27, ord('b')):
             break
         elif key == ord('d'):
             COLUMNS[:] = [
@@ -1076,7 +1217,7 @@ def history_column_config_menu(stdscr):
         
         try:
             stdscr.addstr(h-4, 0, "·" * min(w, 80))
-            stdscr.addstr(h-3, 2, "↑↓: navigate  Enter: toggle  +/-: width  a: align  d: default  q: back")
+            stdscr.addstr(h-3, 2, "↑↓: navigate  Enter: toggle  +/-: width  a: align  d: default  Esc/b: back")
             stdscr.addstr(h-2, 2, "(width 1-60)")
         except curses.error:
             pass
@@ -1084,7 +1225,7 @@ def history_column_config_menu(stdscr):
         stdscr.refresh()
         key = stdscr.getch()
         
-        if key == ord('q'):
+        if key in (27, ord('b')):
             break
         elif key == ord('d'):
             HISTORY_COLUMNS[:] = [
@@ -1178,8 +1319,11 @@ def input_customization_menu(stdscr):
         for field in CUSTOM_FIELDS:
             key = 'custom_' + field['name']
             is_active = key in INPUT_FIELDS
-            if field.get('type') in ('money', 'decimal'):
+            if field.get('type') == 'money':
                 default = '0.00'
+            elif field.get('type') == 'decimal':
+                d = field.get('decimals', 2)
+                default = '0' if d == 0 else '0.' + '0' * d
             elif field.get('type') == 'number':
                 default = '0'
             else:
@@ -1220,7 +1364,7 @@ def input_customization_menu(stdscr):
         except curses.error:
             pass
 
-        draw_footer(stdscr, "↑↓: navigate  Enter: toggle  d: defaults  q: back")
+        draw_footer(stdscr, "↑↓: navigate  Enter: toggle  d: defaults  Esc/b: back")
 
         stdscr.refresh()
         key = stdscr.getch()
@@ -1241,7 +1385,7 @@ def input_customization_menu(stdscr):
         elif key == ord('d'):
             INPUT_FIELDS = ['name', 'quantity', 'description', 'location', 'cost']
             save_config()
-        elif key in (ord('q'), ord('b')):
+        elif key in (27, ord('b')):
             break
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1322,7 +1466,7 @@ def about_menu(stdscr):
 
         max_scroll = max(0, len(wrapped_lines) - visible_lines)
 
-        draw_footer(stdscr, "↑↓: scroll  r: reset to default  q: back")
+        draw_footer(stdscr, "↑↓: scroll  r: reset to default  Esc/b: back")
 
         stdscr.refresh()
         key = stdscr.getch()
@@ -1340,15 +1484,45 @@ def about_menu(stdscr):
                     scroll_offset = 0
             except Exception:
                 pass
-        elif key in (ord('q'), ord('b')):
+        elif key in (27, ord('b')):
             break
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Custom Fields Configuration Menu
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _config_safe_row(stdscr):
+    h, w = stdscr.getmaxyx()
+    return max(0, min(22, h - 3)), w
+
+def _edit_config_text(stdscr, label, current, max_len=40):
+    """Prompt for a text value on a guaranteed on-screen row. Returns the new
+    value or None if blank/cancelled."""
+    row, w = _config_safe_row(stdscr)
+    try:
+        stdscr.move(row, 0)
+        stdscr.clrtoeol()
+    except curses.error:
+        pass
+    val = get_input(stdscr, label, row, 2, max_len, current)
+    if val in ("__CANCEL__", "__GOBACK__"):
+        return None
+    val = val.strip()
+    return val or None
+
+def _config_status(stdscr, msg):
+    row, w = _config_safe_row(stdscr)
+    try:
+        stdscr.move(row, 0)
+        stdscr.clrtoeol()
+        stdscr.addstr(row, 2, msg[:max(0, w - 3)])
+    except curses.error:
+        pass
+    stdscr.refresh()
+    stdscr.getch()
+
 def config_menu(stdscr, inventory=None):
-    global CUSTOM_FIELDS, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, SALE_ENABLED, DATE_FORMAT, INPUT_FIELDS, COLUMNS
+    global CUSTOM_FIELDS, THEME_COLOR, THEME_COLORS, THEME_COLOR_PAIRS, PROGRAM_NAME, SUBTITLE, PO_ENABLED, MONETIZATION_ENABLED, COLOR_CRITICAL_ENABLED, DELETE_CONFIRM_ENABLED, HIDE_ZERO_QTY_ENABLED, AUTO_DELETE_ZERO_ENABLED, SALE_ENABLED, DATE_FORMAT, INPUT_FIELDS, COLUMNS, SPLASH_ENABLED
 
     load_config()
     stdscr.keypad(1)
@@ -1443,7 +1617,6 @@ def config_menu(stdscr, inventory=None):
 
         if current_tab == 1:
             y = content_top
-            current_color_name = next((k for k, v in THEME_COLORS.items() if v == THEME_COLOR), 'cyan')
             try:
                 stdscr.addstr(y, 2, "Theme Color (titles & splash):")
                 y += 1
@@ -1458,13 +1631,27 @@ def config_menu(stdscr, inventory=None):
                     except curses.error:
                         pass
                 y += len(color_options) + 1
-                stdscr.addstr(y, 2, "(↑↓ or 1-7: select, Enter change)")
+                stdscr.addstr(y, 2, "(↑↓: select, 1-7: color, Enter: edit/change)")
                 y += 2
-                stdscr.addstr(y, 2, "Program Name (max 40 chars):")
-                stdscr.addstr(y+1, 2, f"  {PROGRAM_NAME}")
+
+                # Program Name
+                if current_option == 7:
+                    stdscr.attron(curses.color_pair(1))
+                stdscr.addstr(y, 2, "> Program Name (max 40 chars):" if current_option == 7
+                              else "  Program Name (max 40 chars):")
+                stdscr.addstr(y + 1, 4, f"{PROGRAM_NAME}")
+                if current_option == 7:
+                    stdscr.attroff(curses.color_pair(1))
                 y += 2
-                stdscr.addstr(y, 2, "Subtitle (max 40 chars):")
-                stdscr.addstr(y+1, 2, f"  {SUBTITLE}")
+
+                # Subtitle
+                if current_option == 8:
+                    stdscr.attron(curses.color_pair(1))
+                stdscr.addstr(y, 2, "> Subtitle (max 40 chars):" if current_option == 8
+                              else "  Subtitle (max 40 chars):")
+                stdscr.addstr(y + 1, 4, f"{SUBTITLE}")
+                if current_option == 8:
+                    stdscr.attroff(curses.color_pair(1))
                 y += 3
                 stdscr.addstr(y, 2, "n: edit name  s: edit subtitle  r: reset defaults")
             except curses.error:
@@ -1485,6 +1672,7 @@ def config_menu(stdscr, inventory=None):
                     f" 9. Inventory Column Configuration",
                     f"10. History Column Configuration",
                     f"11. Inventory Input Customization",
+                    f"12. {'Show Splash':<20}: {'On' if SPLASH_ENABLED else 'Off'}",
                 ]
                 for i, line in enumerate(lines):
                     if i == current_option:
@@ -1497,7 +1685,7 @@ def config_menu(stdscr, inventory=None):
             except curses.error:
                 pass
 
-        draw_footer(stdscr, "←/→: tabs  ↑↓: navigate  Enter: select  ?: about  q: back")
+        draw_footer(stdscr, "←/→: tabs  ↑↓: navigate  Enter: select  ?: about  Esc/b: back")
 
         stdscr.refresh()
         key = stdscr.getch()
@@ -1511,17 +1699,17 @@ def config_menu(stdscr, inventory=None):
             current_tab = (current_tab + 1) % len(TABS)
             current_option = 0
         elif current_tab == 1 and key == curses.KEY_UP:
-            current_option = (current_option - 1) % 7
+            current_option = (current_option - 1) % 9
         elif current_tab == 1 and key == curses.KEY_DOWN:
-            current_option = (current_option + 1) % 7
+            current_option = (current_option + 1) % 9
         elif current_tab == 0 and key == curses.KEY_UP:
             current_option = max(0, current_option - 1)
         elif current_tab == 0 and key == curses.KEY_DOWN:
             current_option = min(max(0, len(CUSTOM_FIELDS) - 1), current_option + 1)
         elif current_tab == 2 and key == curses.KEY_UP:
-            current_option = (current_option - 1) % 11
+            current_option = (current_option - 1) % 12
         elif current_tab == 2 and key == curses.KEY_DOWN:
-            current_option = (current_option + 1) % 11
+            current_option = (current_option + 1) % 12
         elif key in (10, curses.KEY_ENTER, ord(' ')):
             if current_tab == 1:
                 color_names = list(THEME_COLORS.keys())
@@ -1529,6 +1717,16 @@ def config_menu(stdscr, inventory=None):
                     THEME_COLOR = THEME_COLORS[color_names[current_option]]
                     curses.init_pair(1, THEME_COLOR, -1)
                     save_config()
+                elif current_option == 7:
+                    new_name = _edit_config_text(stdscr, "Enter new program name: ", PROGRAM_NAME, 40)
+                    if new_name:
+                        PROGRAM_NAME = new_name
+                        save_config()
+                elif current_option == 8:
+                    new_subtitle = _edit_config_text(stdscr, "Enter new subtitle: ", SUBTITLE, 40)
+                    if new_subtitle:
+                        SUBTITLE = new_subtitle
+                        save_config()
             elif current_tab == 2:
                 if current_option == 0:
                     COLOR_CRITICAL_ENABLED = not COLOR_CRITICAL_ENABLED
@@ -1560,9 +1758,12 @@ def config_menu(stdscr, inventory=None):
                     history_column_config_menu(stdscr)
                 elif current_option == 10:
                     input_customization_menu(stdscr)
+                elif current_option == 11:
+                    SPLASH_ENABLED = not SPLASH_ENABLED
+                    save_config()
         elif key == ord('?'):
             about_menu(stdscr)
-        elif key in (ord('q'), ord('b')):
+        elif key in (27, ord('b')):
             break
         elif current_tab == 1 and 49 <= key <= 55:
             try:
@@ -1576,41 +1777,22 @@ def config_menu(stdscr, inventory=None):
             except Exception as e:
                 pass
         elif current_tab == 1 and key == ord('r'):
-            try:
-                PROGRAM_NAME = "TUI Inventory"
-                SUBTITLE = "Track your inventory with ease"
-                THEME_COLOR = THEME_COLORS['cyan']
-                curses.init_pair(1, THEME_COLOR, -1)
-                save_config()
-                stdscr.addstr(y+12, 2, "Defaults restored. Press any key...".ljust(w-3))
-                stdscr.refresh()
-                stdscr.getch()
-            except:
-                pass
+            PROGRAM_NAME = "TUI Inventory"
+            SUBTITLE = "Track your inventory with ease"
+            THEME_COLOR = THEME_COLORS['cyan']
+            curses.init_pair(1, THEME_COLOR, -1)
+            save_config()
+            _config_status(stdscr, "Defaults restored. Press any key...")
         elif current_tab == 1 and key == ord('n'):
-            try:
-                stdscr.addstr(y+12, 2, "Enter new program name: ".ljust(w-3))
-                stdscr.refresh()
-                curses.echo()
-                new_name = stdscr.getstr(y+12, 25, 40).decode('utf-8').strip()
-                curses.noecho()
-                if new_name:
-                    PROGRAM_NAME = new_name
-                    save_config()
-            except:
-                curses.noecho()
+            new_name = _edit_config_text(stdscr, "Enter new program name: ", PROGRAM_NAME, 40)
+            if new_name:
+                PROGRAM_NAME = new_name
+                save_config()
         elif current_tab == 1 and key == ord('s'):
-            try:
-                stdscr.addstr(y+12, 2, "Enter new subtitle: ".ljust(w-3))
-                stdscr.refresh()
-                curses.echo()
-                new_subtitle = stdscr.getstr(y+12, 21, 40).decode('utf-8').strip()
-                curses.noecho()
-                if new_subtitle:
-                    SUBTITLE = new_subtitle
-                    save_config()
-            except:
-                curses.noecho()
+            new_subtitle = _edit_config_text(stdscr, "Enter new subtitle: ", SUBTITLE, 40)
+            if new_subtitle:
+                SUBTITLE = new_subtitle
+                save_config()
         elif current_tab == 0 and key == ord('a'):
             if len(CUSTOM_FIELDS) >= 5:
                 try:
@@ -1647,6 +1829,13 @@ def config_menu(stdscr, inventory=None):
                             elif typ in ('l', 'list'):
                                 typ = 'list'
                                 break
+                        decimals = None
+                        if typ == 'decimal':
+                            dec_str = get_input(stdscr, "Decimal places [0-6, default 2]: ", 6, 2, 1, "2", field_type="number")
+                            try:
+                                decimals = max(0, min(6, int(dec_str))) if dec_str.strip() else 2
+                            except ValueError:
+                                decimals = 2
                         if typ == 'date':
                             max_len = 30
                         elif typ == 'list':
@@ -1661,14 +1850,23 @@ def config_menu(stdscr, inventory=None):
                                 options.append(opt.strip())
                             CUSTOM_FIELDS.append({'name':key, 'label':label, 'type':typ, 'max_len': max_len, 'options': options})
                         else:
-                            max_len_str = get_input(stdscr, "Max character length [default 60]: ", 6, 2, 10, "60", field_type="number")
+                            max_row = 7 if typ == 'decimal' else 6
+                            max_len_str = get_input(stdscr, "Max character length [default 60]: ", max_row, 2, 10, "60", field_type="number")
                             try:
                                 max_len = int(max_len_str) if max_len_str.strip() else 60
                             except ValueError:
                                 max_len = 60
-                            CUSTOM_FIELDS.append({'name':key, 'label':label, 'type':typ, 'max_len': max_len})
+                            field_entry = {'name':key, 'label':label, 'type':typ, 'max_len': max_len}
+                            if decimals is not None:
+                                field_entry['decimals'] = decimals
+                            CUSTOM_FIELDS.append(field_entry)
                         save_config()
-                        msg_y = 16 if typ == 'list' else 8
+                        if typ == 'list':
+                            msg_y = 16
+                        elif typ == 'decimal':
+                            msg_y = 9
+                        else:
+                            msg_y = 8
                         stdscr.addstr(msg_y, 2, "Added. Press any key...")
                         stdscr.getch()
                 except curses.error:
@@ -1695,19 +1893,23 @@ def config_menu(stdscr, inventory=None):
                             for i, opt in enumerate(options):
                                 stdscr.addstr(6 + i, 2, f"  {i+1}. {opt}")
                             instr_y = 6 + len(options) + 2
-                            stdscr.addstr(instr_y, 2, "n: edit label  a: add option  d: delete option  q: save & back")
+                            stdscr.addstr(instr_y, 2, "n: edit label  a: add option  d: delete option  Esc/b: save & back")
                             prompt_base = 6 + len(options) + 4
                         else:
-                            stdscr.addstr(4, 2, f"Type: {field_type}")
                             instr_y = 6
-                            stdscr.addstr(instr_y, 2, "n: edit label  q: save & back")
+                            if field_type == 'decimal':
+                                stdscr.addstr(4, 2, f"Type: decimal ({field.get('decimals', 2)} places)")
+                                stdscr.addstr(instr_y, 2, "n: edit label  p: decimal places  Esc/b: save & back")
+                            else:
+                                stdscr.addstr(4, 2, f"Type: {field_type}")
+                                stdscr.addstr(instr_y, 2, "n: edit label  Esc/b: save & back")
                             prompt_base = 8
                     except curses.error:
                         pass
                     stdscr.refresh()
                     key = stdscr.getch()
                     
-                    if key == ord('q'):
+                    if key in (27, ord('b')):
                         save_config()
                         break
                     elif key == ord('n'):
@@ -1731,6 +1933,21 @@ def config_menu(stdscr, inventory=None):
                             save_config()
                             if inventory:
                                 safe_save_inventory(inventory)
+                    elif key == ord('p') and field_type == 'decimal':
+                        prompt_y = prompt_base
+                        stdscr.addstr(prompt_y, 2, "Decimal places (0-6): ".ljust(w-3))
+                        curses.echo()
+                        try:
+                            dec_str = stdscr.getstr(prompt_y, 25, 1).decode('utf-8').strip()
+                        except:
+                            dec_str = ""
+                        curses.noecho()
+                        if dec_str.strip():
+                            try:
+                                field['decimals'] = max(0, min(6, int(dec_str)))
+                                save_config()
+                            except ValueError:
+                                pass
                     elif key == ord('a') and field_type == 'list':
                         options = field.get('options', [])
                         if len(options) >= 10:
@@ -1980,6 +2197,8 @@ def add_item(stdscr, inventory):
         'location': 'NA', 'description': 'NA',
         'min_value': '0.00', 'max_value': '0.00', 'sale': '0.00'
     }
+    if 'quantity' not in INPUT_FIELDS:
+        defaults['quantity'] = '1'
 
     field_values = {}
     for key in defaults:
@@ -2041,10 +2260,14 @@ def add_item(stdscr, inventory):
                 continue
             fv = field_values.get(fk, '')
             ftype = get_field_type(fk)
-            if ftype == 'money' and isinstance(fv, (int, float)):
+            if fk.startswith('custom_'):
+                cf = next((f for f in CUSTOM_FIELDS if f['name'] == fk[7:]), None)
+                if cf is not None and isinstance(fv, (int, float)):
+                    fv = _fmt_custom(fv, cf)
+                else:
+                    fv = str(fv) if fv != '' else ''
+            elif ftype == 'money' and isinstance(fv, (int, float)):
                 fv = f"${fv:,.2f}"
-            elif ftype == 'decimal' and isinstance(fv, (int, float)):
-                fv = f"{fv:,.2f}"
             elif ftype == 'number' and isinstance(fv, (int, float)):
                 fv = f"{fv:,}"
             else:
@@ -2201,7 +2424,13 @@ def add_item(stdscr, inventory):
     for field in CUSTOM_FIELDS:
         ckey = 'custom_' + field['name']
         if ckey in field_values:
-            new_item.custom[field['name']] = field_values[ckey]
+            val = field_values[ckey]
+            if field.get('type') in ('money', 'decimal') and isinstance(val, str) and val.strip():
+                try:
+                    val = _round_custom(float(val), field)
+                except ValueError:
+                    pass
+            new_item.custom[field['name']] = val
         else:
             if field.get('type') in ('money', 'decimal'):
                 new_item.custom[field['name']] = 0.0
@@ -2235,10 +2464,10 @@ def add_item(stdscr, inventory):
                 ftype = AVAILABLE_INPUT_FIELDS[key]['type']
             
             # Format value based on type
-            if ftype == 'money' and isinstance(value, (int, float)):
+            if key.startswith('custom_') and isinstance(value, (int, float)):
+                formatted_value = _fmt_custom(value, cf)
+            elif ftype == 'money' and isinstance(value, (int, float)):
                 formatted_value = f"${value:,.2f}"
-            elif ftype == 'decimal' and isinstance(value, (int, float)):
-                formatted_value = f"{value:,.2f}"
             elif ftype == 'number' and isinstance(value, (int, float)):
                 formatted_value = f"{value:,}"
             elif ftype == 'date':
@@ -2353,14 +2582,10 @@ def select_field_to_edit(stdscr, item):
                 if y >= h - len(options) - 4:
                     break
                 value = item.custom.get(field['name'], "")
-                if field['type'] == 'money' and isinstance(value, (int, float)):
-                    disp = f"${value:,.2f}"
-                elif field['type'] == 'decimal' and isinstance(value, (int, float)):
-                    disp = f"{value:,.2f}"
-                elif field['type'] == 'number' and isinstance(value, (int, float)):
-                    disp = f"{value:,}"
+                if value == "":
+                    disp = "(empty)"
                 else:
-                    disp = str(value) if value != "" else "(empty)"
+                    disp = _fmt_custom(value, field)
                 label_padded = (field['label'] + ":").ljust(15)
                 try:
                     stdscr.addnstr(y, 4, f"{label_padded}{disp[:w-20]}", w-5)
@@ -2401,7 +2626,7 @@ def select_field_to_edit(stdscr, item):
         if typed_input:
             draw_footer(stdscr, f"Enter → {typed_input}")
         else:
-            draw_footer(stdscr, "↑↓:select  Enter: confirm  q: back")
+            draw_footer(stdscr, "↑↓:select  Enter: confirm  Esc/b: back")
 
         stdscr.refresh()
         key = stdscr.getch()
@@ -2433,7 +2658,7 @@ def select_field_to_edit(stdscr, item):
                         return ch
                 except ValueError:
                     pass
-        elif key == 27 or key == ord('q'):
+        elif key in (27, ord('b')):
             return None
         elif key in (curses.KEY_BACKSPACE, 127):
             if typed_input:
@@ -2642,7 +2867,7 @@ def edit_item(stdscr, inventory, orig_idx):
                     new_custom[field['name']] = 0.0
                 else:
                     try:
-                        new_custom[field['name']] = float(val)
+                        new_custom[field['name']] = _round_custom(float(val), field)
                     except ValueError:
                         try:
                             stdscr.addstr(5, 2, f"Invalid {field['type']} – kept original")
@@ -2923,7 +3148,7 @@ def edit_item(stdscr, inventory, orig_idx):
                         new_custom[field['name']] = 0.0
                     else:
                         try:
-                            new_custom[field['name']] = float(val)
+                            new_custom[field['name']] = _round_custom(float(val), field)
                         except ValueError:
                             try:
                                 stdscr.addstr(y + 1, 2, f"Invalid {field['type']} – kept original")
@@ -3055,7 +3280,7 @@ def edit_custom_fields_only(stdscr, inventory, orig_idx):
                     new_custom[field['name']] = 0.0
                 else:
                     try:
-                        new_custom[field['name']] = float(val)
+                        new_custom[field['name']] = _round_custom(float(val), field)
                     except ValueError:
                         try:
                             stdscr.addstr(y + 1, 2, f"Invalid {field['type']} – kept original")
@@ -3140,13 +3365,7 @@ def view_details(stdscr, inventory, orig_idx):
 
         for field in CUSTOM_FIELDS:
             value = item.custom.get(field['name'], "")
-            disp = str(value)
-            if field['type'] == 'money' and isinstance(value, (int, float)):
-                disp = f"${value:,.2f}"
-            elif field['type'] == 'decimal' and isinstance(value, (int, float)):
-                disp = f"{value:,.2f}"
-            elif field['type'] == 'number' and isinstance(value, (int, float)):
-                disp = f"{value:,}"
+            disp = _fmt_custom(value, field)
             y = draw_detail_line(stdscr, y, field['label'], disp, label_width)
 
         low_thresh = item.custom.get('low_stock_threshold', 5)
@@ -3167,7 +3386,7 @@ def view_details(stdscr, inventory, orig_idx):
         y = draw_detail_line(stdscr, y, "Description", item.description, label_width)
         y += 2
 
-        draw_footer(stdscr, "e: edit   d: delete   c: configuration   q: back")
+        draw_footer(stdscr, "e: edit   d: delete   c: configuration   other keys: back")
 
         key = stdscr.getch()
 
@@ -3270,7 +3489,7 @@ def filter_select_menu(stdscr, inventory, column_key):
         stdscr.addstr(0, 0, f"Filter by {label}".center(min(w, 60)))
         stdscr.attroff(curses.color_pair(1))
         stdscr.addstr(1, 0, "")
-        stdscr.addstr(2, 0, "↑↓ navigate  Enter select  q cancel")
+        stdscr.addstr(2, 0, "↑↓ navigate  Enter select  Esc/b cancel")
         stdscr.addstr(3, 0, "─" * min(w, 60))
         
         visible_options = min(h - 6, len(options))
@@ -3291,7 +3510,7 @@ def filter_select_menu(stdscr, inventory, column_key):
         stdscr.refresh()
         key = stdscr.getch()
         
-        if key == ord('q'):
+        if key in (27, ord('b')):
             return None
         
         if key == curses.KEY_UP and current_option > 0:
@@ -3437,8 +3656,10 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
             align = col.get('align', 'left')
             if key.startswith('custom_'):
                 value = item.custom.get(key[7:], '')
+                cfield = next((f for f in CUSTOM_FIELDS if f['name'] == key[7:]), None)
             else:
                 value = getattr(item, key, '')
+                cfield = None
             if value is None:
                 value = ''
             
@@ -3446,6 +3667,8 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
                 disp = f"{value:,}"
             elif key in ('cost', 'min_value', 'max_value', 'sale'):
                 disp = f"${value:,.2f}"
+            elif cfield is not None and isinstance(value, (int, float)):
+                disp = _fmt_custom(value, cfield)
             else:
                 disp = str(value)
             
@@ -3481,7 +3704,7 @@ def draw_menu(stdscr, selected_row_idx, inventory, search_term="", sort_key='nam
 
     stats = f"Items:{total_items}"
     sale_control = "r:sale " if SALE_ENABLED else ""
-    controls = f"q:quit a:add e:edit d:delete {sale_control}h:history c:configure ↑↓:navigate ENTER:details"
+    controls = f"q:quit ESC:back a:add e:edit d:delete {sale_control}h:history c:configure ↑↓:navigate ENTER:details"
     footer = f"{stats} | {controls}"
     draw_footer(stdscr, footer)
 
@@ -3670,8 +3893,10 @@ def draw_split_screen(stdscr, selected_row_idx, inventory, search_term="", sort_
             align = col.get("align", "left")
             if key.startswith("custom_"):
                 value = item.custom.get(key[7:], "")
+                cfield = next((f for f in CUSTOM_FIELDS if f["name"] == key[7:]), None)
             else:
                 value = getattr(item, key, "")
+                cfield = None
             if value is None:
                 value = ""
 
@@ -3679,6 +3904,8 @@ def draw_split_screen(stdscr, selected_row_idx, inventory, search_term="", sort_
                 disp = f"{value:,}"
             elif key in ("cost", "min_value", "max_value", "sale"):
                 disp = f"${value:,.2f}"
+            elif cfield is not None and isinstance(value, (int, float)):
+                disp = _fmt_custom(value, cfield)
             else:
                 disp = str(value)
 
@@ -3856,7 +4083,7 @@ def draw_split_screen(stdscr, selected_row_idx, inventory, search_term="", sort_
     total_items = len(filtered)
     stats = f"Items:{total_items}"
     sale_control = "r:sale " if SALE_ENABLED else ""
-    controls = f"q:quit a:add e:edit d:delete {sale_control}h:history c:configure ↑↓:navigate ENTER:details"
+    controls = f"q:quit ESC:back a:add e:edit d:delete {sale_control}h:history c:configure ↑↓:navigate ENTER:details"
     footer = f"{stats} | {controls}"
     draw_footer(stdscr, footer)
 
@@ -3865,7 +4092,9 @@ def draw_split_screen(stdscr, selected_row_idx, inventory, search_term="", sort_
 # Main loop
 # ──────────────────────────────────────────────────────────────────────────────
 
-def show_splash(stdscr):
+def show_splash(stdscr, program_name=None, subtitle=None):
+    program_name = program_name if program_name is not None else PROGRAM_NAME
+    subtitle = subtitle if subtitle is not None else SUBTITLE
     curses.curs_set(0)
     curses.start_color()
     curses.use_default_colors()
@@ -3899,10 +4128,10 @@ def show_splash(stdscr):
             stdscr.attron(cy)
             stdscr.addstr(box_y,     box_x,     "┌" + "─" * inner_w + "┐")
             stdscr.addstr(box_y + 1, box_x,     "│" + " " * inner_w + "│")
-            stdscr.addstr(box_y + 2, box_x,     "│" + PROGRAM_NAME.center(inner_w) + "│")
+            stdscr.addstr(box_y + 2, box_x,     "│" + program_name.center(inner_w) + "│")
             stdscr.addstr(box_y + 3, box_x,     "│" + "─" * inner_w + "│")
             stdscr.addstr(box_y + 4, box_x,     "│" + " " * inner_w + "│")
-            stdscr.addstr(box_y + 5, box_x,     "│" + SUBTITLE.center(inner_w) + "│")
+            stdscr.addstr(box_y + 5, box_x,     "│" + subtitle.center(inner_w) + "│")
             stdscr.addstr(box_y + 6, box_x,     "│" + " " * inner_w + "│")
             stdscr.addstr(box_y + 7, box_x,     "│" + "[ Add • Edit • Sell • Search ]".center(inner_w) + "│")
             stdscr.addstr(box_y + 8, box_x,     "│" + " " * inner_w + "│")
@@ -4005,18 +4234,645 @@ def inline_search(stdscr, current_term):
         elif key == curses.KEY_END:
             cursor_pos = len(search_term)
 
-def main(stdscr):
-    load_config()
+# ──────────────────────────────────────────────────────────────────────────────
+# Manager: unified entry point for selecting and managing inventories
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _plural(n, word):
+    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+def draw_manager(stdscr, selected_idx):
+    stdscr.clear()
+    h, w = stdscr.getmaxyx()
+
+    try:
+        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+        stdscr.addstr(0, 0, MGR_PROGRAM_NAME.center(min(w, 80)))
+        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+    except curses.error:
+        pass
+
+    try:
+        stdscr.addstr(1, 0, MGR_SUBTITLE.center(min(w, 80)))
+        stdscr.addstr(2, 0, "─" * min(w, 80))
+    except curses.error:
+        pass
+
+    if not INVENTORIES:
+        try:
+            stdscr.addstr(h//2 - 1, 0, "No inventories found".center(min(w, 80)))
+            stdscr.addstr(h//2 + 1, 0, "Press 'a' to create one".center(min(w, 80)))
+        except curses.error:
+            pass
+    else:
+        visible_lines = max(1, h - 6)
+        start_y = 4
+        for i in range(min(len(INVENTORIES), visible_lines)):
+            name = INVENTORIES[i]['name']
+            prefix = "> " if i == selected_idx else "  "
+            line = f"{prefix}[{i+1}] {name}"
+            try:
+                if i == selected_idx:
+                    stdscr.attron(curses.color_pair(4))
+                stdscr.addstr(start_y + i, 0, line)
+                if i == selected_idx:
+                    stdscr.attroff(curses.color_pair(4))
+            except curses.error:
+                pass
+
+    try:
+        stdscr.addstr(h-2, 0, "·" * min(w, 80))
+    except curses.error:
+        pass
+
+    footer = "↑↓: Navigate  Enter: Open  a: Add  d: Delete  r: Rescan  x: Remove stale files  c: Settings  h: About  q/Esc: Quit"
+    try:
+        stdscr.addnstr(h-1, 0, footer.ljust(w-1), w-1)
+    except curses.error:
+        pass
+
+def confirm_quit(stdscr):
+    """Ask the user to confirm quitting the whole app. Returns True to quit."""
+    stdscr.clear()
+    h, w = stdscr.getmaxyx()
+    try:
+        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+        stdscr.addstr(0, 0, "Quit?".center(min(w, 60)))
+        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+        stdscr.addstr(2, 0, "─" * min(w, 40))
+        stdscr.addstr(4, 2, "Are you sure you want to quit?")
+        stdscr.addstr(6, 2, "y: yes quit")
+        stdscr.addstr(7, 2, "n: no, I'm not done")
+    except curses.error:
+        pass
+    stdscr.refresh()
+    ch = stdscr.getch()
+    return ch in (ord('y'), ord('Y'), ord(' '))
+
+def manager_loop(stdscr):
+    """Run the manager screen. Returns a folder Path to open, or None to quit."""
+    global MGR_SELECTED_IDX
+    stdscr.keypad(1)
+    curses.curs_set(0)
+    load_manager_config()
+    apply_theme(MGR_THEME_COLOR)
+    scan_inventories()
+    if INVENTORIES:
+        MGR_SELECTED_IDX = min(MGR_SELECTED_IDX, len(INVENTORIES) - 1)
+    else:
+        MGR_SELECTED_IDX = 0
+
+    while True:
+        if not check_size(stdscr):
+            stdscr.clear()
+            stdscr.refresh()
+            continue
+
+        draw_manager(stdscr, MGR_SELECTED_IDX)
+        stdscr.refresh()
+        key = stdscr.getch()
+
+        if key == curses.KEY_RESIZE:
+            stdscr.clear()
+            stdscr.refresh()
+            continue
+
+        if key in (ord('q'), 27):
+            if confirm_quit(stdscr):
+                return None
+        elif key == curses.KEY_UP and INVENTORIES and MGR_SELECTED_IDX > 0:
+            MGR_SELECTED_IDX -= 1
+        elif key == curses.KEY_DOWN and INVENTORIES and MGR_SELECTED_IDX < len(INVENTORIES) - 1:
+            MGR_SELECTED_IDX += 1
+        elif key in (10, curses.KEY_ENTER, ord(' ')) and INVENTORIES:
+            return INVENTORIES[MGR_SELECTED_IDX]['folder']
+        elif key == ord('a'):
+            create_new_inventory(stdscr)
+            MGR_SELECTED_IDX = min(MGR_SELECTED_IDX, max(0, len(INVENTORIES) - 1))
+        elif key == ord('d'):
+            delete_inventory(stdscr)
+            MGR_SELECTED_IDX = min(MGR_SELECTED_IDX, max(0, len(INVENTORIES) - 1))
+        elif key == ord('r'):
+            scan_inventories()
+            MGR_SELECTED_IDX = min(MGR_SELECTED_IDX, max(0, len(INVENTORIES) - 1))
+        elif key == ord('x'):
+            cleanup_folders(stdscr)
+            scan_inventories()
+            MGR_SELECTED_IDX = min(MGR_SELECTED_IDX, max(0, len(INVENTORIES) - 1))
+        elif key == ord('c'):
+            manager_config_menu(stdscr)
+            apply_theme(MGR_THEME_COLOR)
+        elif key in (ord('h'), ord('?')):
+            manager_about(stdscr)
+
+def _manager_message(stdscr, lines):
+    stdscr.clear()
+    for i, line in enumerate(lines):
+        try:
+            stdscr.addstr(4 + i, 2, line)
+        except curses.error:
+            pass
+    try:
+        stdscr.addstr(len(lines) + 6, 2, "Press any key...")
+    except curses.error:
+        pass
+    stdscr.refresh()
+    stdscr.getch()
+
+def create_new_inventory(stdscr):
+    global MGR_SELECTED_IDX
+    h, w = stdscr.getmaxyx()
+    if h < 15 or w < 50:
+        return
+
+    stdscr.clear()
+    try:
+        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+        stdscr.addstr(0, 0, "Create New Inventory".center(min(w, 60)))
+        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+        stdscr.addstr(2, 0, "─" * min(w, 40))
+    except curses.error:
+        pass
+
+    name = get_input(stdscr, "Enter name for new inventory: ", 4, 2, max_len=40, allow_cancel=True)
+    if name in ("__CANCEL__", "__GOBACK__") or not name.strip():
+        return
+
+    folder = SCRIPT_DIR / name.strip()
+    if folder.exists():
+        _manager_message(stdscr, ["Folder already exists!"])
+        return
+
+    try:
+        folder.mkdir()
+        config = json.loads(json.dumps(DEFAULT_CONFIG))
+        config['program_name'] = name.strip()
+        with (folder / "inventory_config.json").open('w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2)
+
+        tpl_about = SCRIPT_DIR / "AboutTemplate"
+        tpl_default = SCRIPT_DIR / "AboutDefaultTemplate"
+        if tpl_about.exists():
+            shutil.copy2(tpl_about, folder / "About")
+        else:
+            (folder / "About").write_text(DEFAULT_ABOUT, encoding='utf-8')
+        if tpl_default.exists():
+            shutil.copy2(tpl_default, folder / "AboutDefault")
+        else:
+            (folder / "AboutDefault").write_text(DEFAULT_ABOUT, encoding='utf-8')
+    except Exception as e:
+        _manager_message(stdscr, [f"Error creating inventory: {e}"])
+        return
+
+    scan_inventories()
+    for i, inv in enumerate(INVENTORIES):
+        if inv['folder'] == folder:
+            MGR_SELECTED_IDX = i
+            break
+
+def delete_inventory(stdscr):
+    if not INVENTORIES or MGR_SELECTED_IDX >= len(INVENTORIES):
+        return
+
+    inv = INVENTORIES[MGR_SELECTED_IDX]
+    name = inv['name']
+    folder = inv['folder']
+    h, w = stdscr.getmaxyx()
+
+    stdscr.clear()
+    try:
+        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+        stdscr.addstr(0, 0, "Delete Inventory".center(min(w, 60)))
+        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+        stdscr.addstr(2, 0, "─" * min(w, 40))
+        stdscr.addstr(4, 2, f"Delete '{name}'?")
+        stdscr.addstr(5, 2, "This will permanently delete the folder and all data.")
+    except curses.error:
+        pass
+
+    confirm = get_input(stdscr, "Type 'yes' to confirm: ", 7, 2, max_len=10, allow_cancel=True)
+    if confirm != "yes":
+        return
+
+    try:
+        shutil.rmtree(folder)
+    except Exception as e:
+        _manager_message(stdscr, [f"Error: {e}"])
+        return
+
+    _manager_message(stdscr, ["Deleted!"])
+
+def cleanup_folders(stdscr):
+    """Remove redundant per-folder app copies and caches from each inventory."""
+    targets = []
+    for inv in INVENTORIES:
+        folder = inv['folder']
+        stale_py = folder / "inventory.py"
+        stale_cache = folder / "__pycache__"
+        if stale_py.exists() or stale_cache.is_dir():
+            targets.append(inv)
+
+    h, w = stdscr.getmaxyx()
+    stdscr.clear()
+    try:
+        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+        stdscr.addstr(0, 0, "Clean Up Inventory Folders".center(min(w, 60)))
+        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+        stdscr.addstr(2, 0, "─" * min(w, 40))
+    except curses.error:
+        pass
+
+    if not targets:
+        _manager_message(stdscr, ["Nothing to clean up.", "Inventory folders hold data only."])
+        return
+
+    for i, inv in enumerate(targets):
+        try:
+            stdscr.addstr(4 + i, 2, f"- {inv['name']}")
+        except curses.error:
+            pass
+    try:
+        stdscr.addstr(6 + len(targets), 2, "Remove stale inventory.py / __pycache__ from these?")
+    except curses.error:
+        pass
+
+    confirm = get_input(stdscr, "Type 'yes' to confirm: ", 8 + len(targets), 2, max_len=10, allow_cancel=True)
+    if confirm != "yes":
+        return
+
+    removed = 0
+    for inv in targets:
+        folder = inv['folder']
+        for path in (folder / "inventory.py", folder / "__pycache__"):
+            try:
+                if path.is_dir():
+                    shutil.rmtree(path)
+                    removed += 1
+                elif path.exists():
+                    path.unlink()
+                    removed += 1
+            except Exception:
+                pass
+
+    _manager_message(stdscr, [f"Cleaned up {_plural(removed, 'item')}."])
+
+def manager_about(stdscr):
+    stdscr.keypad(1)
+    lines = [
+        MGR_PROGRAM_NAME,
+        "Version 2.0",
+        "",
+        "A single-file TUI inventory manager.",
+        "Create, delete, and open separate inventories.",
+        "Each inventory keeps its own data, config, and About page.",
+        "",
+        "Inventory folders live alongside this script.",
+        "",
+        "Press q to return",
+    ]
+    while True:
+        h, w = stdscr.getmaxyx()
+        if h < 10 or w < 40:
+            stdscr.clear()
+            try:
+                stdscr.addstr(0, 0, "Window too small. Resize and press any key...")
+            except curses.error:
+                pass
+            stdscr.refresh()
+            stdscr.getch()
+            return
+
+        stdscr.clear()
+        try:
+            stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+            stdscr.addstr(0, 0, f"About {MGR_PROGRAM_NAME}".center(min(w, 60)))
+            stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+            stdscr.addstr(2, 0, "─" * min(w, 60))
+        except curses.error:
+            pass
+
+        for i, line in enumerate(lines):
+            try:
+                stdscr.addstr(4 + i, 0, line.center(min(w, 60)))
+            except curses.error:
+                pass
+
+        stdscr.refresh()
+        key = stdscr.getch()
+        if key in (27, ord('b')):
+            return
+
+def manager_theme_menu(stdscr):
+    global MGR_THEME_COLOR
+    stdscr.keypad(1)
+    color_names = list(THEME_COLORS.keys())
+    selected = color_names.index(next((k for k, v in THEME_COLORS.items() if v == MGR_THEME_COLOR), 'cyan'))
+
+    while True:
+        h, w = stdscr.getmaxyx()
+        if h < 15 or w < 50:
+            return
+
+        stdscr.clear()
+        try:
+            stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+            stdscr.addstr(0, 0, "Manager Theme Color".center(min(w, 50)))
+            stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+            stdscr.addstr(2, 0, "─" * min(w, 40))
+        except curses.error:
+            pass
+
+        for i, color_name in enumerate(color_names):
+            try:
+                marker = "> " if i == selected else "  "
+                curses.init_pair(10, THEME_COLORS[color_name], -1)
+                if i == selected:
+                    stdscr.attron(curses.color_pair(4))
+                stdscr.addstr(4 + i, 2, f"{marker}{i + 1}. ")
+                if i == selected:
+                    stdscr.attroff(curses.color_pair(4))
+                stdscr.attron(curses.color_pair(10))
+                stdscr.addstr(color_name.capitalize())
+                stdscr.attroff(curses.color_pair(10))
+            except curses.error:
+                pass
+
+        try:
+            stdscr.addstr(4 + len(color_names), 0, "─" * min(w, 40))
+            stdscr.addstr(5 + len(color_names), 2, "↑↓: Navigate  Enter: Apply  Esc/b: Back")
+        except curses.error:
+            pass
+        stdscr.refresh()
+        key = stdscr.getch()
+
+        if key in (27, ord('b')):
+            return
+        elif key == curses.KEY_UP and selected > 0:
+            selected -= 1
+        elif key == curses.KEY_DOWN and selected < len(color_names) - 1:
+            selected += 1
+        elif key in (10, curses.KEY_ENTER, ord(' ')):
+            MGR_THEME_COLOR = THEME_COLORS[color_names[selected]]
+            save_manager_config()
+            return
+        elif ord('1') <= key <= ord('7'):
+            selected = key - ord('1')
+            MGR_THEME_COLOR = THEME_COLORS[color_names[selected]]
+            save_manager_config()
+            return
+
+def manager_config_menu(stdscr):
+    global MGR_PROGRAM_NAME, MGR_SUBTITLE
+    stdscr.keypad(1)
+    selected = 0
+    options = ["Program name", "Subtitle", "Theme color", "Install command"]
+
+    while True:
+        h, w = stdscr.getmaxyx()
+        if h < 15 or w < 50:
+            return
+
+        stdscr.clear()
+        try:
+            stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+            stdscr.addstr(0, 0, "Manager Settings".center(min(w, 50)))
+            stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+            stdscr.addstr(2, 0, "─" * min(w, 40))
+        except curses.error:
+            pass
+
+        color_name = next((k for k, v in THEME_COLORS.items() if v == MGR_THEME_COLOR), 'cyan')
+        values = [MGR_PROGRAM_NAME, MGR_SUBTITLE, color_name, "Configure"]
+        for i, opt in enumerate(options):
+            try:
+                if i == selected:
+                    stdscr.attron(curses.color_pair(4))
+                stdscr.addstr(4 + i, 2, f"{i+1}. {opt}: {values[i]}")
+                if i == selected:
+                    stdscr.attroff(curses.color_pair(4))
+            except curses.error:
+                pass
+
+        try:
+            stdscr.addstr(4 + len(options), 0, "─" * min(w, 40))
+            stdscr.addstr(5 + len(options), 2, "Enter: Edit  Esc/b: Back")
+        except curses.error:
+            pass
+        stdscr.refresh()
+        key = stdscr.getch()
+
+        if key in (27, ord('b')):
+            return
+        elif key == curses.KEY_UP and selected > 0:
+            selected -= 1
+        elif key == curses.KEY_DOWN and selected < len(options) - 1:
+            selected += 1
+        elif key in (10, curses.KEY_ENTER, ord(' ')):
+            if selected == 0:
+                new = get_input(stdscr, "New name: ", 7, 2, max_len=40, default=MGR_PROGRAM_NAME, allow_cancel=True)
+                if new not in ("__CANCEL__", "__GOBACK__") and new.strip():
+                    MGR_PROGRAM_NAME = new.strip()
+                    save_manager_config()
+            elif selected == 1:
+                new = get_input(stdscr, "New subtitle: ", 7, 2, max_len=60, default=MGR_SUBTITLE, allow_cancel=True)
+                if new not in ("__CANCEL__", "__GOBACK__") and new.strip():
+                    MGR_SUBTITLE = new.strip()
+                    save_manager_config()
+            elif selected == 2:
+                manager_theme_menu(stdscr)
+            elif selected == 3:
+                install_menu(stdscr)
+        elif ord('1') <= key <= ord('9'):
+            idx = key - ord('1')
+            if idx < len(options):
+                selected = idx
+
+def _install_target():
+    return SCRIPT_DIR / "inventory.py"
+
+def check_installed():
+    cmd = Path.home() / "bin" / "tui-inventory"
+    if cmd.exists():
+        if cmd.is_symlink():
+            if cmd.resolve() == _install_target():
+                return "symlink"
+        try:
+            if str(_install_target()) in cmd.read_text():
+                return "wrapper"
+        except Exception:
+            pass
+    bashrc = Path.home() / ".bashrc"
+    if bashrc.exists():
+        try:
+            content = bashrc.read_text()
+            if str(SCRIPT_DIR) in content and "inventory" in content.lower():
+                return "path"
+        except Exception:
+            pass
+    return None
+
+def do_install(option):
+    bin_dir = Path.home() / "bin"
+    bashrc_path = Path.home() / ".bashrc"
+    wrapper_path = bin_dir / "tui-inventory"
+
+    if option == 1:
+        try:
+            bin_dir.mkdir(exist_ok=True)
+        except PermissionError:
+            return "mkdir_failed"
+
+        try:
+            content = f'''#!/bin/sh
+exec python3 "{_install_target()}" "$@"
+'''
+            with wrapper_path.open('w') as f:
+                f.write(content)
+            os.chmod(str(wrapper_path), 0o755)
+        except (PermissionError, OSError):
+            return "write_failed"
+
+        path_line = 'export PATH="$HOME/bin:$PATH"'
+        try:
+            if bashrc_path.exists():
+                if path_line not in bashrc_path.read_text():
+                    with bashrc_path.open('a') as f:
+                        f.write(f"\n{path_line}\n")
+            else:
+                with bashrc_path.open('w') as f:
+                    f.write(f"{path_line}\n")
+        except PermissionError:
+            return "bashrc_failed"
+        return "success"
+
+    elif option == 2:
+        path_line = f'export PATH="$PATH:{SCRIPT_DIR}"'
+        try:
+            if bashrc_path.exists():
+                if path_line not in bashrc_path.read_text():
+                    with bashrc_path.open('a') as f:
+                        f.write(f"\n{path_line}\n")
+            else:
+                with bashrc_path.open('w') as f:
+                    f.write(f"{path_line}\n")
+        except PermissionError:
+            return "bashrc_failed"
+        return "success"
+
+    elif option == 3:
+        if wrapper_path.exists():
+            try:
+                wrapper_path.unlink()
+            except (PermissionError, OSError):
+                return "unlink_failed"
+        return "success"
+
+    return "error"
+
+def install_menu(stdscr):
+    stdscr.keypad(1)
+    selected = 0
+    options = ["Install 'tui-inventory' command (Recommended)", "Add folder to PATH", "Uninstall"]
+
+    while True:
+        h, w = stdscr.getmaxyx()
+        if h < 15 or w < 50:
+            return
+
+        stdscr.clear()
+        try:
+            stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
+            stdscr.addstr(0, 0, "Install Command".center(min(w, 50)))
+            stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+            stdscr.addstr(2, 0, "─" * min(w, 40))
+        except curses.error:
+            pass
+
+        status = check_installed()
+        if status:
+            text = "Status: command installed" if status in ("symlink", "wrapper") else "Status: folder in PATH"
+            try:
+                stdscr.addstr(3, 2, text)
+            except curses.error:
+                pass
+
+        for i, opt in enumerate(options):
+            try:
+                if i == selected:
+                    stdscr.attron(curses.color_pair(4))
+                stdscr.addstr(4 + i, 2, f"{i+1}. {opt}")
+                if i == selected:
+                    stdscr.attroff(curses.color_pair(4))
+            except curses.error:
+                pass
+
+        try:
+            stdscr.addstr(4 + len(options), 0, "─" * min(w, 40))
+            stdscr.addstr(5 + len(options), 2, "Enter: Install  Esc/b: Back")
+        except curses.error:
+            pass
+        stdscr.refresh()
+        key = stdscr.getch()
+
+        if key in (27, ord('b')):
+            return
+        elif key == curses.KEY_UP and selected > 0:
+            selected -= 1
+        elif key == curses.KEY_DOWN and selected < len(options) - 1:
+            selected += 1
+        elif key in (10, curses.KEY_ENTER, ord(' ')):
+            result = do_install(selected + 1)
+            if result == "success":
+                _manager_message(stdscr, ["Installation complete!", "Restart terminal or run: source ~/.bashrc"])
+            elif result == "mkdir_failed":
+                _manager_message(stdscr, ["Error: Cannot create ~/bin directory.", "Try manually: mkdir ~/bin"])
+            elif result == "write_failed":
+                _manager_message(stdscr, ["Error: Cannot write wrapper file."])
+            elif result == "bashrc_failed":
+                _manager_message(stdscr, ["Warning: Could not update ~/.bashrc",
+                                          'Manually add: export PATH="$HOME/bin:$PATH"'])
+            elif result == "unlink_failed":
+                _manager_message(stdscr, ["Error: Cannot remove command."])
+            else:
+                _manager_message(stdscr, ["Installation failed."])
+        elif ord('1') <= key <= ord('9'):
+            idx = key - ord('1')
+            if idx < len(options):
+                selected = idx
+
+def run(stdscr):
+    """Top-level dispatcher: manager <-> selected inventory, all in-process."""
     curses.curs_set(0)
     curses.start_color()
     curses.use_default_colors()
-    curses.init_pair(1, THEME_COLOR, -1)
-    curses.init_pair(2, curses.COLOR_YELLOW, -1)
-    curses.init_pair(3, curses.COLOR_RED,    -1)
-    curses.init_pair(4, curses.COLOR_GREEN,  -1)
+    curses.set_escdelay(25)
+    load_manager_config()
+    apply_theme(MGR_THEME_COLOR)
+
+    show_splash(stdscr, MGR_PROGRAM_NAME, MGR_SUBTITLE)
+
+    while True:
+        folder = manager_loop(stdscr)
+        if folder is None:
+            break
+
+        set_data_dir(folder)
+        result = inventory_main(stdscr)
+        if result == "quit":
+            break
+
+        apply_theme(MGR_THEME_COLOR)
+        stdscr.clear()
+        stdscr.refresh()
+
+def inventory_main(stdscr):
+    load_config()
+    curses.curs_set(0)
+    apply_theme(THEME_COLOR)
     curses.set_escdelay(25)
 
-    show_splash(stdscr)
+    if SPLASH_ENABLED:
+        show_splash(stdscr, PROGRAM_NAME, SUBTITLE)
 
     inventory = load_inventory()
 
@@ -4101,7 +4957,8 @@ def main(stdscr):
 
 
         elif key == ord('q'):
-            break
+            if confirm_quit(stdscr):
+                return "quit"
 
         elif key == ord('a'):
             add_item(stdscr, inventory)
@@ -4186,6 +5043,8 @@ def main(stdscr):
                 column_filter = {}
                 selected_row_idx = 0
                 scroll_offset = 0
+            else:
+                return "back"
 
         elif key in (ord('n'), ord('t'), ord('l')):
             key_map = {ord('n'):'name', ord('t'):'quantity', ord('l'):'location'}
@@ -4250,4 +5109,4 @@ if __name__ == "__main__":
     if not sys.stdin.isatty():
         print("This program must be run in a terminal.")
         sys.exit(1)
-    curses.wrapper(main)
+    curses.wrapper(run)

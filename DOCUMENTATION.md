@@ -1,8 +1,34 @@
-# Weeda Inventory - Complete Documentation
+# TUI Inventory - Complete Documentation
 
 ## Overview
 
-**TUI Inventory** (`inventory.py`) is a single-file, terminal-based inventory management system written in Python 3. It uses the `curses` library to render a full text user interface (TUI) in the terminal. It has **zero external dependencies** -- only Python standard library modules are used.
+**TUI Inventory** (`inventory.py`) is a single-file, terminal-based inventory
+management system written in Python 3. It uses the `curses` library to render a
+full text user interface (TUI) in the terminal. It has **zero external
+dependencies** -- only Python standard library modules are used.
+
+It is a **unified manager + inventory** app:
+
+1. On launch it shows a **manager** screen listing every inventory folder found
+   next to `inventory.py`.
+2. Selecting an inventory opens the familiar inventory UI **in-process** (no
+   subprocess and no per-folder copy of the app). Data files are repointed at the
+   selected folder via `set_data_dir()`, and the inventory shows its own splash
+   screen (its name/subtitle/theme) on entry unless `splash_enabled` is off.
+3. Inside an inventory, `Esc` returns to the manager and `q` quits the whole app.
+
+Each inventory is simply a subfolder holding its own data and configuration:
+
+```
+inventory.py                 # the one app
+manager_config.json          # manager branding (name/subtitle/theme)
+AboutTemplate                # copied into new inventories as "About"
+AboutDefaultTemplate         # copied into new inventories as "AboutDefault"
+<Inventory Name>/
+    inventory_config.json
+    inventory.db, inventory.db.bak, inventory_sales.log
+    About, AboutDefault
+```
 
 **Run it with:**
 ```bash
@@ -27,15 +53,19 @@ python inventory.py
 
 ## File Structure
 
-The entire application lives in a single Python file. At runtime, it creates and manages these data files in the same directory as the script:
+The entire application lives in a single Python file. At runtime, it creates and manages these files:
 
 | File                        | Purpose                                                    |
 |-----------------------------|------------------------------------------------------------|
-| `inventory.py`              | The application (~1900 lines)                             |
-| `inventory.db`              | Main inventory database (CSV format, auto-created)         |
-| `inventory.db.bak`          | Automatic backup of inventory (created before every save)  |
-| `inventory_sales.log`       | Append-only sales transaction log (CSV format)             |
-| `inventory_config.json`     | Custom fields, column config, theme, and settings          |
+| `inventory.py`              | The application (manager + inventory)                      |
+| `manager_config.json`       | Manager program name, subtitle, and theme color            |
+| `AboutTemplate`             | Source for the `About` file of newly created inventories   |
+| `AboutDefaultTemplate`      | Source for the `AboutDefault` file of new inventories      |
+| `<Inventory>/inventory.db`          | Per-inventory database (CSV format, auto-created)   |
+| `<Inventory>/inventory.db.bak`      | Automatic backup (created before every save)        |
+| `<Inventory>/inventory_sales.log`   | Per-inventory append-only sales log (CSV)           |
+| `<Inventory>/inventory_config.json` | Per-inventory custom fields, columns, theme, settings |
+| `<Inventory>/About`, `/AboutDefault`| Per-inventory About text and its restore default    |
 
 ---
 
@@ -44,20 +74,71 @@ The entire application lives in a single Python file. At runtime, it creates and
 Defined at the top of the file:
 
 ```
-SCRIPT_DIR          → Directory containing the script (all data files stored here)
-DB_FILE             → "inventory.db"
-BACKUP_FILE         → "inventory.db.bak"
-SALES_LOG           → "inventory_sales.log"
-CONFIG_FILE         → "inventory_config.json"
+SCRIPT_DIR          → Directory containing inventory.py (the app root)
+DATA_DIR            → Currently selected inventory folder (defaults to SCRIPT_DIR)
+                      Changed by set_data_dir(folder)
+DB_FILE             → DATA_DIR / "inventory.db"
+BACKUP_FILE         → DATA_DIR / "inventory.db.bak"
+SALES_LOG           → DATA_DIR / "inventory_sales.log"
+CONFIG_FILE         → DATA_DIR / "inventory_config.json"
+ABOUT_FILE          → DATA_DIR / "About"
+ABOUT_DEFAULT_FILE  → DATA_DIR / "AboutDefault"
+
+MANAGER_CONFIG_FILE → SCRIPT_DIR / "manager_config.json"
+MGR_PROGRAM_NAME    → Manager title (customizable)
+MGR_SUBTITLE        → Manager subtitle (customizable)
+MGR_THEME_COLOR     → Manager accent color
+INVENTORIES         → List of {'folder': Path, 'name': str} found by scan_inventories()
+MGR_SELECTED_IDX    → Highlighted row in the manager list
+DEFAULT_CONFIG      → Dict written as inventory_config.json for new inventories
 
 AVAILABLE_COLUMNS   → Dict of all available columns with label, width, align
 COLUMNS            → List of currently active columns with key, width, align
 
 CUSTOM_FIELDS = []  → Global list of user-defined custom fields (max 5)
 PO_ENABLED     = True → Whether PO numbers are enabled for sales
-PROGRAM_NAME   = "TUI Inventory" → Customizable program name
-SUBTITLE       = "Track your inventory with ease" → Customizable subtitle
+PROGRAM_NAME   = "TUI Inventory" → Customizable program name (active inventory)
+SUBTITLE       = "Track your inventory with ease" → Customizable subtitle (active inventory)
+SPLASH_ENABLED = True → Whether the active inventory shows its splash on entry
 ```
+
+> **Path indirection:** all per-inventory file globals derive from `DATA_DIR`.
+> `set_data_dir(folder)` reassigns them, so the entire inventory codebase works
+> unchanged against whichever folder the manager selected.
+
+---
+
+## Manager (multi-inventory launcher)
+
+The manager is the app's entry point. It lives in the same file and is entered
+through `run()`.
+
+| Function                  | Description                                                                 |
+|---------------------------|-----------------------------------------------------------------------------|
+| `set_data_dir(folder)`    | Repoint `DATA_DIR`/`DB_FILE`/`SALES_LOG`/`CONFIG_FILE`/`ABOUT_FILE` at a folder. |
+| `apply_theme(color)`      | (Re)initialize curses color pairs 1-4 for the given theme color.            |
+| `load_manager_config()`   | Load `manager_config.json` into `MGR_*` globals.                            |
+| `save_manager_config()`   | Persist `MGR_*` globals to `manager_config.json`.                           |
+| `scan_inventories()`      | Find immediate subfolders containing `inventory_config.json`; fill/sort `INVENTORIES`. |
+| `draw_manager()`          | Render the manager list and footer.                                         |
+| `manager_loop()`          | Manager event loop. Returns the selected folder `Path`, or `None` to quit.  |
+| `create_new_inventory()`  | Prompt for a name, create the folder, write `DEFAULT_CONFIG` + About files. |
+| `delete_inventory()`      | Confirm, then `shutil.rmtree()` the selected inventory folder.              |
+| `cleanup_folders()`       | Remove stale per-folder `inventory.py` / `__pycache__` (data is preserved). |
+| `manager_config_menu()`   | Edit manager program name, subtitle, theme, and install command.           |
+| `manager_theme_menu()`    | Pick the manager theme color.                                               |
+| `manager_about()`         | Static About page for the manager.                                          |
+| `install_menu()` / `do_install()` / `check_installed()` | Install a `tui-inventory` command in `~/bin` or add the folder to `PATH`. |
+
+**Manager keys:** `↑↓` navigate, `Enter` open, `a` add, `d` delete, `r` rescan,
+`x` remove stale files, `c` settings, `h` about, `q`/`Esc` quit (asks for confirmation).
+
+**Key conventions (app-wide):**
+- `Esc` or `b` = back / cancel — works in every submenu and prompt
+- `q` = quit the whole application — only from the manager and the inventory
+  main list, and always shows a confirmation popup (`y: yes quit` /
+  `n: no, I'm not done`; `y` quits, `n` or any other key cancels)
+- `q` does nothing inside submenus
 
 ---
 
@@ -70,7 +151,7 @@ Each inventory item is represented by an `Item` instance with 8 built-in fields 
 | Field         | Type    | Default | Description                                |
 |---------------|---------|---------|--------------------------------------------|
 | `name`        | `str`   | required| Item name (stripped of whitespace)          |
-| `quantity`    | `int`   | `0`     | Current stock count                        |
+| `quantity`    | `int`   | `0`     | Current stock count. Note: when adding an item, if `quantity` is not among the configured input fields, it defaults to `1` (so "logbook"-style inventories stay visible with Hide Zero Qty on). |
 | `cost`        | `float` | `0.0`   | Unit cost (purchase price)                 |
 | `min_value`   | `float` | `0.0`   | Minimum value (hidden field)               |
 | `max_value`   | `float` | `0.0`   | Maximum value (hidden field)               |
@@ -139,29 +220,35 @@ Each inventory item is represented by an `Item` instance with 8 built-in fields 
 
 | Function             | Description                                                                                      |
 |----------------------|--------------------------------------------------------------------------------------------------|
-| `config_menu(stdscr, inventory=None)`| Tabbed settings menu with Custom Fields, Settings, and Display tabs. |
+| `config_menu(stdscr, inventory=None)`| Tabbed settings menu with Custom Fields, Theming, and System Settings tabs. |
 
 **Settings Tabs:**
-1. **Custom Fields** - Add/delete custom fields (max 5)
-2. **Settings** - Theme color, program name, subtitle
-3. **Display** - Low stock threshold, critical stock, PO toggle, column configuration
+1. **Custom Fields** - Add/delete/edit custom fields (max 5)
+2. **Theming** - Theme color, program name, subtitle
+3. **System Settings** - Feature toggles, date format, column/input configuration, splash
 
-**Settings Tab Options:**
+**Theming Tab Options:**
 - Theme color (↑↓ or 1-7): Select color, Enter to apply
-- Program name (n): Customize the program name displayed in title
-- Subtitle (s): Customize the subtitle shown below the title
+- Program Name (↑↓ then Enter, or `n`): Customize the program name displayed in title
+- Subtitle (↑↓ then Enter, or `s`): Customize the subtitle shown below the title
+- Reset defaults (`r`): Restore name, subtitle, and cyan theme
 
-**Display Tab Options:**
-- Show stock alerts (↑↓ or 1): Toggle yellow/red coloring for low/critical stock items
-- PO Number (2): Toggle PO number tracking on/off for sales
-- Monetization (3): Toggle price input when recording sales
-- Column settings (4): Open column configuration menu
+**System Settings Tab Options (↑↓ + Enter):**
+- Show stock alerts - Toggle yellow/red coloring for low/critical stock items
+- PO Number - Toggle PO number tracking on/off for sales
+- Monetization - Toggle price input when recording sales
+- Delete Confirm / Hide Zero Qty / Auto Delete Zero Qty - Behavior toggles
+- Sale Option - Toggle sale recording
+- Date Format - Switch MM/DD/YYYY <-> DD/MM/YYYY
+- Column configuration (inventory, history) and Input Customization
+- **Show Splash** - Toggle whether this inventory's splash screen is shown on entry (default On)
 
 **Navigation Controls:**
 - ←/→ or h/l: Switch between tabs
-- ↑/↓: Navigate options within Settings/Display tabs
+- Esc or b: Back to previous screen
+- ↑/↓: Navigate options within the tab (Theming wraps through colors + name + subtitle)
 - Enter: Select/apply current option
-- Number keys (1-7 in Settings, 1-4 in Display): Quick-select and apply
+- Number keys (1-7 in Theming): Quick-select a theme color
 
 **Important Implementation Notes:**
 
@@ -169,7 +256,7 @@ Each inventory item is represented by an `Item` instance with 8 built-in fields 
 
 2. **Tab selection state:** When switching tabs with ←/→, reset `current_option = 0` to avoid stale selection state.
 
-3. **Enter key handling:** The Enter key handler for tab navigation must come AFTER the selection/apply handler, otherwise it intercepts Enter before the selection code runs. Use separate handlers: `(ord('q'), ord('b'))` for quit, and `(10, curses.KEY_ENTER, ord(' '))` for selection.
+3. **Enter key handling:** The Enter key handler for tab navigation must come AFTER the selection/apply handler, otherwise it intercepts Enter before the selection code runs. Use separate handlers: `(27, ord('b'))` for back (Esc/b), and `(10, curses.KEY_ENTER, ord(' '))` for selection.
 
 4. **Display toggle alignment:** Use consistent spacing after the colon for all toggle options. Example:
    ```python
@@ -185,7 +272,17 @@ Each inventory item is represented by an `Item` instance with 8 built-in fields 
 **Adding a custom field** prompts for:
 1. **Label** -- Display name (e.g., "Color")
 2. **Key** -- Internal storage key (auto-generated from label, e.g., "color")
-3. **Type** -- One of: `text`, `number`, `money` (defaults to `text` if invalid)
+3. **Type** -- One of: `text`, `number`, `decimal`, `money`, `date`, `list` (defaults to `text` if invalid)
+4. **Decimal places** -- (only when type is `decimal`) 0-6, default 2; stored as
+   the optional `decimals` key in the field dict. Controls display precision
+   everywhere (list columns, details, edit previews) and rounding on save.
+   Fields created before this setting existed default to 2 places.
+5. **Max character length** -- (text/number/decimal/money) default 60
+6. **Options** -- (only when type is `list`) up to 10 choices
+
+**Editing a custom field** (select field, press Enter): `n` edits the label;
+for `decimal` fields, `p` changes the decimal places (0-6); for `list` fields,
+`a`/`d` add/remove options; Esc/b saves and goes back.
 
 ### Column Configuration
 
@@ -293,19 +390,33 @@ This is the core rendering function that draws the main inventory list screen. I
 
 Many sub-screens also have their own minimum size checks (e.g., config menu needs 50x15, column config needs 50x15).
 
-### Main Loop: `main()` (lines 1716+)
+### Top Level: `run()` and the Inventory Loop: `inventory_main()`
 
-The application entry point (wrapped by `curses.wrapper()`). Sets up:
+The app entry point is `run()` (wrapped by `curses.wrapper()`). It:
 
-**Color pairs:**
+1. Initializes curses colors and sets the manager theme.
+2. Shows the splash screen **once** using the manager branding.
+3. Loops: show the manager (`manager_loop()`), and if a folder is chosen,
+   `set_data_dir(folder)` then run `inventory_main()` for that inventory.
+4. Restores the manager theme and returns to the manager when `inventory_main()`
+   returns `"back"`; exits when the manager returns `None` or the inventory
+   returns `"quit"`.
+
+`inventory_main()` is the former single-inventory `main()`: it loads the active
+inventory's config, and — if `splash_enabled` is on for that inventory (default)
+— shows the inventory's own splash (its name, subtitle, and theme) before
+loading `inventory.db` and running the list view event loop.
+
+**Color pairs (reinitialized per scope by `apply_theme()`):**
 | Pair | Foreground | Usage                          |
 |------|------------|--------------------------------|
-| 1    | Cyan (default) | Headers, titles            |
+| 1    | Theme color | Headers, titles               |
 | 2    | Yellow     | Low stock items (qty <= 5)     |
 | 3    | Red        | Critical stock items (qty <= 3)|
 | 4    | Green      | Selected row highlight         |
 
-**Theme colors:** User can customize the title/header color from several options.
+**Theme colors:** The manager theme comes from `manager_config.json`; each
+inventory's theme comes from its own `inventory_config.json`.
 
 **State variables:**
 - `selected_row_idx` -- Currently highlighted row in the list
@@ -313,9 +424,9 @@ The application entry point (wrapped by `curses.wrapper()`). Sets up:
 - `sort_key` -- Current sort column (`'name'`, `'quantity'`, or `'location'`)
 - `sort_directions` -- Dict tracking asc/desc for each sort key (`1` = ascending, `-1` = descending)
 
-**Main event loop** (runs until `q` is pressed):
+**Main event loop** (runs until `q` quits the app or `Esc` returns to the manager):
 1. Check terminal size (show resize message if too small)
-2. Call `draw_menu()` to render the list
+2. Call `draw_menu()` (or `draw_split_screen()`) to render the list
 3. Wait for keypress
 4. Handle key:
 
@@ -323,7 +434,8 @@ The application entry point (wrapped by `curses.wrapper()`). Sets up:
 |----------------|-----------------------------------------------------|
 | Up Arrow       | Move selection up                                   |
 | Down Arrow     | Move selection down                                 |
-| `q`            | Quit the application                                |
+| `q`            | Quit the whole application (asks for confirmation)   |
+| `Esc`          | Clear active search/filter, else return to manager  |
 | `a`            | Add a new item                                      |
 | `s`            | Enter search mode                                   |
 | `n`            | Sort by name (toggle asc/desc if already sorting by name) |
@@ -347,7 +459,7 @@ if __name__ == "__main__":
     if not sys.stdin.isatty():
         print("This program must be run in a terminal.")
         sys.exit(1)
-    curses.wrapper(main)
+    curses.wrapper(run)
 ```
 
 Checks that stdin is a TTY before launching. `curses.wrapper()` handles terminal initialization and cleanup (restoring terminal state on exit or crash).
