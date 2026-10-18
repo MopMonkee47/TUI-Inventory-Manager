@@ -2504,8 +2504,8 @@ def select_field_to_edit(stdscr, item):
         "3.  Cost",
         "4.  Location",
         "5.  Description",
-        "6.  Min Value (hidden)",
-        "7.  Max Value (hidden)",
+        "6.  Min Value",
+        "7.  Max Value",
         "8.  All fields",
     ]
     custom_start = 8
@@ -2517,7 +2517,7 @@ def select_field_to_edit(stdscr, item):
     for j in range(1, 8):
         num = all_fields_num + j
         sep = "  " if num < 10 else " "
-        label = f"{num}.{sep}Part#" if j == 1 else f"{num}.{sep}UPC" if j == 2 else f"{num}.{sep}PO" if j == 3 else f"{num}.{sep}Date" if j == 4 else f"{num}.{sep}Sale Price (hidden)" if j == 5 else f"{num}.{sep}Low stock threshold" if j == 6 else f"{num}.{sep}Critical stock threshold"
+        label = f"{num}.{sep}Part#" if j == 1 else f"{num}.{sep}UPC" if j == 2 else f"{num}.{sep}PO" if j == 3 else f"{num}.{sep}Date" if j == 4 else f"{num}.{sep}Sale Price" if j == 5 else f"{num}.{sep}Low stock threshold" if j == 6 else f"{num}.{sep}Critical stock threshold"
         options.append(label)
     options.append("0.  Cancel")
 
@@ -2570,9 +2570,9 @@ def select_field_to_edit(stdscr, item):
         except: y += 1
 
         try:
-            stdscr.addnstr(y, 4, f"Min Value:     ${item.min_value:,.2f} (hidden)", w-5); y += 1
-            stdscr.addnstr(y, 4, f"Max Value:     ${item.max_value:,.2f} (hidden)", w-5); y += 1
-            stdscr.addnstr(y, 4, f"Sale:          ${item.sale:,.2f} (hidden)", w-5); y += 1
+            stdscr.addnstr(y, 4, f"Min Value:     ${item.min_value:,.2f}", w-5); y += 1
+            stdscr.addnstr(y, 4, f"Max Value:     ${item.max_value:,.2f}", w-5); y += 1
+            stdscr.addnstr(y, 4, f"Sale:          ${item.sale:,.2f}", w-5); y += 1
             stdscr.addnstr(y, 4, f"Time Stamp:    {item.timestamp}", w-5); y += 1
         except:
             pass

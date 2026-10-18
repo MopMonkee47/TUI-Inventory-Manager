@@ -153,8 +153,8 @@ Each inventory item is represented by an `Item` instance with 8 built-in fields 
 | `name`        | `str`   | required| Item name (stripped of whitespace)          |
 | `quantity`    | `int`   | `0`     | Current stock count. Note: when adding an item, if `quantity` is not among the configured input fields, it defaults to `1` (so "logbook"-style inventories stay visible with Hide Zero Qty on). |
 | `cost`        | `float` | `0.0`   | Unit cost (purchase price)                 |
-| `min_value`   | `float` | `0.0`   | Minimum value (hidden field)               |
-| `max_value`   | `float` | `0.0`   | Maximum value (hidden field)               |
+| `min_value`   | `float` | `0.0`   | Minimum value                              |
+| `max_value`   | `float` | `0.0`   | Maximum value                              |
 | `sale`        | `float` | `0.0`   | Sale price per unit                        |
 | `location`    | `str`   | `""`    | Storage location                           |
 | `description` | `str`   | `""`    | Free-text description                      |
@@ -328,16 +328,14 @@ for `decimal` fields, `p` changes the decimal places (0-6); for `list` fields,
 3. Cost
 4. Location
 5. Description
-6. Min Value (hidden field)
-7. Max Value (hidden field)
-8. Sale Price (hidden field)
+6. Min Value
+7. Max Value
+8. Sale Price
 9. All fields (edits everything including custom fields)
 L. Low stock threshold (per-item)
 R. Critical stock threshold (per-item)
 C. Custom fields only
 0. Cancel
-
-The term "hidden" for fields 6-8 means they are not shown in the main list view -- they are only visible in the detail view and edit screens.
 
 ### Delete & View
 
